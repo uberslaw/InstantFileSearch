@@ -53,12 +53,15 @@ internal static class IfsLaunchOps
 
     public static string FindRoot()
     {
-        var dir = AppContext.BaseDirectory;
-        for (var i = 0; i < 8 && !string.IsNullOrEmpty(dir); i++)
+        foreach (var start in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
         {
-            if (LooksLikeRoot(dir))
-                return dir;
-            dir = Directory.GetParent(dir)?.FullName ?? "";
+            var dir = start;
+            for (var i = 0; i < 12 && !string.IsNullOrEmpty(dir); i++)
+            {
+                if (LooksLikeRoot(dir))
+                    return dir;
+                dir = Directory.GetParent(dir)?.FullName ?? "";
+            }
         }
 
         return Directory.GetCurrentDirectory();
@@ -216,19 +219,45 @@ internal static class IfsLaunchOps
         try
         {
             if (File.Exists(PidFilePath)
-                && int.TryParse(File.ReadAllText(PidFilePath).Trim(), out var tracked)
+                && int.TryParse(File.ReadAllText(PidFilePath).Trim().Split('\n', '\r')[0], out var tracked)
                 && tracked > 0
                 && ServiceRuntime.IsProcessAlive(tracked)
-                && !pids.Contains(tracked))
+                && !pids.Contains(tracked)
+                && PidFileMatchesProcess(tracked, prefix))
             {
-                using var trackedProcess = Process.GetProcessById(tracked);
-                if (trackedProcess.ProcessName.Equals("InstantFileSearch", StringComparison.OrdinalIgnoreCase))
-                    pids.Add(tracked);
+                pids.Add(tracked);
             }
         }
         catch { /* stale pid file */ }
 
         return pids;
+    }
+
+    private static bool PidFileMatchesProcess(int pid, string prefix)
+    {
+        using var process = Process.GetProcessById(pid);
+        var name = process.ProcessName;
+        if (name.Equals("InstantFileSearch", StringComparison.OrdinalIgnoreCase))
+        {
+            var image = TryGetImagePath(process);
+            if (string.IsNullOrEmpty(image))
+                return false;
+            return Path.GetFullPath(image).StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (!name.Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        try
+        {
+            var written = File.GetLastWriteTimeUtc(PidFilePath);
+            var started = process.StartTime.ToUniversalTime();
+            return started >= written.AddSeconds(-15) && started <= written.AddMinutes(10);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static string? TryGetImagePath(Process process)
@@ -375,7 +404,7 @@ internal static class IfsLaunchOps
 
     public static void OpenCli(LaunchControlWindow window, string root)
     {
-        if (!Directory.Exists(root))
+        if (!Directory.Exists(root) || !LooksLikeRoot(root))
         {
             window.AppendLog($"Repo root not found: {root}", "ERROR");
             return;
@@ -392,7 +421,8 @@ internal static class IfsLaunchOps
                 Process.Start(new ProcessStartInfo
                 {
                     FileName = wt,
-                    Arguments = $"-d {Quote(root)} -- cmd /k \"{banner}\"",
+                    Arguments = $"-d {Quote(root)} -- cmd /k {Quote(banner)}",
+                    WorkingDirectory = root,
                     UseShellExecute = true
                 });
                 window.AppendLog($"Opened Windows Terminal (wt) at {root}");
@@ -628,7 +658,7 @@ internal static class IfsLaunchOps
             return "\"\"";
         if (value.IndexOfAny([' ', '\t', '"']) < 0)
             return value;
-        return "\"" + value.Replace("\"", "\\\"") + "\"";
+        return "\"" + value.Replace("\"", "\"\"") + "\"";
     }
 
     private sealed class LcSettings
