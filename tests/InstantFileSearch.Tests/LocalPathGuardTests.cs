@@ -127,6 +127,98 @@ public class LocalPathGuardTests
             Directory.Delete(outside, recursive: true);
         }
     }
+
+    [Fact]
+    public void IsSameOrUnderTreatsTrailingSeparatorsAsTheSameRoot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ifs-slash-" + Guid.NewGuid().ToString("N"));
+        var child = Path.Combine(root, "child");
+        Directory.CreateDirectory(child);
+        try
+        {
+            var slashed = root + Path.DirectorySeparatorChar;
+            Assert.True(LocalPathGuard.IsSameOrUnder(root, slashed));
+            Assert.True(LocalPathGuard.IsSameOrUnder(slashed, root));
+            Assert.True(LocalPathGuard.IsSameOrUnder(child, slashed));
+            Assert.True(LocalPathGuard.TryResolveExistingDirectory(slashed, out var resolved));
+            Assert.Equal(Path.GetFullPath(root), resolved);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void IsSameOrUnderAcceptsVolumeRootAsScanRoot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ifs-vol-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var volume = Path.GetPathRoot(root);
+            Assert.False(string.IsNullOrEmpty(volume));
+            Assert.True(LocalPathGuard.IsSameOrUnder(root, volume!));
+            Assert.True(LocalPathGuard.IsSameOrUnder(volume!, volume!));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void StripExtendedPrefixMapsToUnprefixedPath()
+    {
+        Assert.Equal(@"C:\Windows", LocalPathGuard.StripExtendedPrefix(@"\\?\C:\Windows"));
+        Assert.Equal(@"C:\Windows", LocalPathGuard.StripExtendedPrefix(@"\\.\C:\Windows"));
+        Assert.Equal(@"\\server\share\folder", LocalPathGuard.StripExtendedPrefix(@"\\?\UNC\server\share\folder"));
+        Assert.Equal("/tmp/foo", LocalPathGuard.StripExtendedPrefix("/tmp/foo"));
+        Assert.Equal("/tmp/foo", LocalPathGuard.CanonicalizeFullPath("/tmp/foo/"));
+    }
+
+    [Fact]
+    public void WindowsDriveLetterMeansVolumeRootNotCwd()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var drive = Path.GetPathRoot(Path.GetTempPath())?.TrimEnd('\\', '/');
+        Assert.False(string.IsNullOrEmpty(drive));
+        Assert.Equal(2, drive!.Length);
+        Assert.Equal(':', drive[1]);
+
+        Assert.True(LocalPathGuard.TryGetFullPath(drive, out var fromLetter));
+        Assert.True(LocalPathGuard.TryGetFullPath(drive + "\\", out var fromRoot));
+        Assert.Equal(fromRoot, fromLetter, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(Path.GetFullPath(drive + "\\"), fromLetter, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void WindowsExtendedPrefixResolvesToTheSameDirectory()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var root = Path.Combine(Path.GetTempPath(), "ifs-ext-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var extended = @"\\?\" + Path.GetFullPath(root);
+            Assert.True(LocalPathGuard.TryResolveExistingDirectory(extended, out var resolved));
+            Assert.False(resolved.StartsWith(@"\\?\", StringComparison.Ordinal));
+            Assert.Equal(Path.GetFullPath(root), resolved);
+            Assert.True(LocalPathGuard.IsSameOrUnder(extended, root));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
 }
 
 public class FolderNodeTests

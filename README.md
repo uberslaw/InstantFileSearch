@@ -4,10 +4,10 @@ Windows disk explorer in the TreeSize mold: scan a folder, see the largest direc
 
 ## What it does
 
-- Scans a drive or folder in the background (junctions skipped, access-denied paths ignored)
+- Scans a drive or folder in the background (reparse points — junctions and symlinks — skipped; access-denied paths ignored)
 - Shows a folder tree sorted by size, with percent-of-parent bars
 - Lists files and subfolders for the selected directory
-- Instant search across the scanned index (`*.log`, `report`, full path text)
+- Instant search across the scanned index (`*.log`, `report`, full path text; first 5,000 matches)
 - Open, Show in Explorer, copy path; drag a folder onto the window to scan it
 
 ## Run
@@ -15,9 +15,11 @@ Windows disk explorer in the TreeSize mold: scan a folder, see the largest direc
 Needs **Windows** and the **.NET 8 Desktop Runtime** (or the SDK). No network, no admin, no extra services.
 
 ```powershell
-dotnet test InstantFileSearch.slnx
+dotnet test tests/InstantFileSearch.Tests/InstantFileSearch.Tests.csproj
 dotnet run --project src/InstantFileSearch/InstantFileSearch.csproj
 ```
+
+`InstantFileSearch.slnx` is for Visual Studio. `dotnet test InstantFileSearch.slnx` needs the .NET 9 SDK (SDK 8 cannot load `.slnx`).
 
 Self-contained exe (no runtime install on the target PC):
 

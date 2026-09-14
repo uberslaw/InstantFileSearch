@@ -4,10 +4,12 @@ namespace InstantFileSearch;
 
 public static class FileNameSearch
 {
+    public const int DefaultLimit = 5000;
+
     public static IEnumerable<FileEntry> Filter(
         IEnumerable<FileEntry> files,
         string query,
-        int limit = 5000)
+        int limit = DefaultLimit)
     {
         if (string.IsNullOrWhiteSpace(query))
         {

@@ -21,7 +21,7 @@ public static class LocalPathGuard
 
         try
         {
-            var resolved = Path.GetFullPath(path.Trim());
+            var resolved = CanonicalizeFullPath(Path.GetFullPath(NormalizeInput(path)));
             if (string.IsNullOrWhiteSpace(resolved))
             {
                 return false;
@@ -124,6 +124,69 @@ public static class LocalPathGuard
         fullPath = resolved;
         return true;
     }
+
+    /// <summary>
+    /// <c>\\?\C:\</c>, <c>\\.\C:\</c>, and <c>\\?\UNC\server\share</c> are the same
+    /// locations as the unprefixed paths. Callers must not treat the prefix as a
+    /// different root.
+    /// </summary>
+    public static string StripExtendedPrefix(string path)
+    {
+        if (path.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase))
+        {
+            return @"\\" + path[8..];
+        }
+
+        if (path.StartsWith(@"\\?\", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith(@"\\.\", StringComparison.OrdinalIgnoreCase))
+        {
+            return path[4..];
+        }
+
+        return path;
+    }
+
+    /// <summary>
+    /// <see cref="Path.GetFullPath(string)"/> may keep a trailing slash. Treat
+    /// <c>/tmp/foo</c> and <c>/tmp/foo/</c> as the same location, but keep the
+    /// slash on volume roots (<c>/</c>, <c>C:\</c>) so "under root" still works.
+    /// </summary>
+    public static string CanonicalizeFullPath(string path)
+    {
+        var stripped = StripExtendedPrefix(path);
+        var volumeRoot = Path.GetPathRoot(stripped);
+        var trimmed = stripped.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (string.IsNullOrEmpty(volumeRoot))
+        {
+            return trimmed;
+        }
+
+        var rootTrimmed = volumeRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (trimmed.Length == 0 || trimmed.Equals(rootTrimmed, Comparison))
+        {
+            return volumeRoot;
+        }
+
+        return trimmed;
+    }
+
+    private static string NormalizeInput(string path)
+    {
+        var trimmed = StripExtendedPrefix(path.Trim());
+        if (OperatingSystem.IsWindows() && IsDriveDesignator(trimmed))
+        {
+            return trimmed + "\\";
+        }
+
+        return trimmed;
+    }
+
+    /// <summary>
+    /// On Windows, <c>C:</c> is the process current directory on that drive, not
+    /// <c>C:\</c>. Operators typing a drive mean the volume root.
+    /// </summary>
+    private static bool IsDriveDesignator(string path) =>
+        path.Length == 2 && char.IsAsciiLetter(path[0]) && path[1] == ':';
 
     private static bool FolderTreeContains(FolderNode node, string fullPath)
     {

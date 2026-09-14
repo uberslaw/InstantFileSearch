@@ -28,12 +28,18 @@ public partial class MainWindow : Window
 
     private void Window_DragOver(object sender, DragEventArgs e)
     {
-        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+        var canDrop = !Vm.IsScanning && e.Data.GetDataPresent(DataFormats.FileDrop);
+        e.Effects = canDrop ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
     }
 
     private async void Window_Drop(object sender, DragEventArgs e)
     {
+        if (Vm.IsScanning)
+        {
+            return;
+        }
+
         if (e.Data.GetData(DataFormats.FileDrop) is not string[] paths || paths.Length == 0)
         {
             return;
