@@ -36,6 +36,17 @@ public class LaunchControlFilesTests
         Assert.Contains("<Version>1.0.0</Version>", csproj, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void MainWindow_code_behind_has_explicit_system_io_for_wpftmp()
+    {
+        var src = File.ReadAllText(Path.Combine(
+            RepoRoot(), "src", "InstantFileSearch", "MainWindow.xaml.cs"));
+        Assert.True(
+            src.Contains("using System.IO;", StringComparison.Ordinal)
+            || src.Contains("System.IO.File", StringComparison.Ordinal),
+            "WPF markup compile (wpftmp) often lacks ImplicitUsings; File/Path in code-behind need using System.IO or System.IO.File.");
+    }
+
     private static string RepoRoot()
     {
         var dir = AppContext.BaseDirectory;
