@@ -1,0 +1,24 @@
+---
+description: On every code change, identify assumptions, research them in-repo, and fix ones that are wrong or unstated.
+alwaysApply: true
+---
+
+# Identify, research, fix assumptions
+
+Applies to **every code change** (implement, fix, refactor, Launch Control, tests). Skip only when the user asked a question and you make **no edits**.
+
+## Identify
+
+Before/while editing, list the assumptions the change relies on. Silent guesses are not allowed. Typical in this repo: OS, paths, SDK, process model, UI binding, “this file/folder always exists”, MLC layout, in-memory-only, Windows-only, test host.
+
+## Research
+
+Verify each against repo code, README, tests, and nearby docs. Grep/read; do not invent. If you cannot verify, say so and pick the safer encoding.
+
+## Fix
+
+Do not ship a known-false or unverified assumption. Encode reality: validation, fallback, correct path/API, or a test that locks the contract. Comments-only is not a fix.
+
+After the change, re-scan for assumptions you just introduced and fix those too.
+
+Do not dump a long assumptions essay in the PR unless something surprising was found. The work product is corrected code + tests.
