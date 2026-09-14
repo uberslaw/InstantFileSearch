@@ -34,6 +34,10 @@
                 <TextBlock Text="{Binding SummaryText}" FontWeight="SemiBold"/>
             </StatusBarItem>
             <Separator/>
+            <StatusBarItem>
+                <TextBlock Text="{Binding LastScanText}" Opacity="0.9"/>
+            </StatusBarItem>
+            <Separator/>
             <StatusBarItem HorizontalAlignment="Stretch">
                 <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis"/>
             </StatusBarItem>

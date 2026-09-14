@@ -7,7 +7,8 @@ Windows disk explorer in the TreeSize mold: scan a folder, see the largest direc
 - Scans a drive or folder in the background (reparse points — junctions and symlinks — skipped; access-denied paths ignored)
 - Shows a folder tree sorted by size, with percent-of-parent bars
 - Lists files and subfolders for the selected directory
-- Instant search across the scanned index (`*.log`, `report`, full path text; first 5,000 matches)
+- Instant search across the scanned index (`*.log`, `report`, full path text; first 5,000 matches). Typing is debounced (200 ms) and filtered off the UI thread.
+- Restores the last successful scan from disk on launch (including when it ran); Scan again to refresh.
 - Open, Show in Explorer, copy path; drag a folder onto the window to scan it
 
 ## Run
@@ -35,6 +36,7 @@ Output is `dist\InstantFileSearch.exe`.
 2. Scan
 3. Click folders on the left (largest at the top)
 4. Type in Search to filter files (`Ctrl+F`)
+5. Close and reopen: the last scan and its time come back from `%LocalAppData%\InstantFileSearch`
 
 Scanning `C:\` is allowed but slow and will skip folders you cannot read. Start with a project or user folder.
 
@@ -70,4 +72,4 @@ There is no Windows service and no Python/venv UI.
 - Runtime: Windows x64, .NET 8 Desktop (or the self-contained publish)
 - Network: none
 - Permissions: read access to the folder you scan; no elevation required
-- Data: nothing is stored; each scan is in-memory only
+- Data: the last successful scan is saved under `%LocalAppData%\InstantFileSearch\last-scan.json` (not the install folder). It is a snapshot, not a live disk view.

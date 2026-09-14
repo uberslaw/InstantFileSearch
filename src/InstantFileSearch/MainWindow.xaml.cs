@@ -11,7 +11,11 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = new MainViewModel();
-        Loaded += (_, _) => SearchBox.Focus();
+        Loaded += async (_, _) =>
+        {
+            SearchBox.Focus();
+            await Vm.RestoreLastScanAsync();
+        };
     }
 
     private MainViewModel Vm => (MainViewModel)DataContext;

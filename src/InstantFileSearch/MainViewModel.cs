@@ -10,9 +10,15 @@ namespace InstantFileSearch;
 
 public sealed class MainViewModel : INotifyPropertyChanged
 {
+    public static readonly TimeSpan SearchDebounce = TimeSpan.FromMilliseconds(200);
+
     private readonly FileScanner _scanner = new();
+    private readonly string _cachePath;
+    private readonly SynchronizationContext? _ui = SynchronizationContext.Current;
     private CancellationTokenSource? _scanCts;
+    private CancellationTokenSource? _searchCts;
     private int _scanGeneration;
+    private int _searchGeneration;
     private ScanResult? _result;
     private string _scanPath = "";
     private string _searchText = "";
@@ -23,9 +29,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private int _filesScanned;
     private int _foldersScanned;
     private string _progressPath = "";
+    private ObservableCollection<EntryRow> _items = [];
 
-    public MainViewModel()
+    public MainViewModel(string? cachePath = null)
     {
+        _cachePath = string.IsNullOrWhiteSpace(cachePath) ? ScanCache.DefaultFilePath : cachePath;
         BrowseCommand = new RelayCommand(Browse, () => !IsScanning);
         ScanCommand = new RelayCommand(async () => await ScanAsync(), () => !IsScanning);
         CancelCommand = new RelayCommand(Cancel, () => IsScanning);
@@ -37,7 +45,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public ObservableCollection<FolderNode> TreeRoots { get; } = [];
-    public ObservableCollection<EntryRow> Items { get; } = [];
+
+    public ObservableCollection<EntryRow> Items
+    {
+        get => _items;
+        private set => SetField(ref _items, value);
+    }
 
     public ICommand BrowseCommand { get; }
     public ICommand ScanCommand { get; }
@@ -59,7 +72,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             if (SetField(ref _searchText, value))
             {
-                RefreshItems();
+                ScheduleItemRefresh();
             }
         }
     }
@@ -117,7 +130,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             OnPropertyChanged();
             if (string.IsNullOrWhiteSpace(SearchText))
             {
-                RefreshItems();
+                ShowFolderContents();
             }
         }
     }
@@ -166,6 +179,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
             return $"{ByteFormatter.ToString(_result.Root.Size)}  ·  {_result.Root.FileCount:N0} files  ·  {_result.Root.FolderCount:N0} folders  ·  {_result.Duration.TotalSeconds:0.0}s{errors}";
         }
     }
+
+    public string LastScanText =>
+        _result is null || _result.CompletedUtc == default
+            ? ""
+            : "Last scan " + _result.CompletedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
 
     private long _bytesScanned;
 
@@ -234,7 +252,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 return;
             }
 
-            ApplyCompletedScan(result);
+            ApplyCompletedScan(result, persist: true, restored: false);
         }
         catch (OperationCanceledException)
         {
@@ -358,7 +376,34 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    private void ApplyCompletedScan(ScanResult result)
+    public Task RestoreLastScanAsync()
+    {
+        if (IsScanning || _result is not null)
+        {
+            return Task.CompletedTask;
+        }
+
+        return Task.Run(() =>
+        {
+            if (!ScanCache.TryLoad(_cachePath, out var cached) || cached is null)
+            {
+                return;
+            }
+
+            PostToUi(() =>
+            {
+                if (IsScanning || _result is not null)
+                {
+                    return;
+                }
+
+                ScanPath = cached.Root.FullPath;
+                ApplyCompletedScan(cached, persist: false, restored: true);
+            });
+        });
+    }
+
+    private void ApplyCompletedScan(ScanResult result, bool persist, bool restored)
     {
         _result = result;
         result.Root.IsExpanded = true;
@@ -366,40 +411,119 @@ public sealed class MainViewModel : INotifyPropertyChanged
         TreeRoots.Add(result.Root);
         SelectedFolder = result.Root;
         ProgressPath = "";
-        StatusText = $"Scan complete. Type in Search to filter {result.AllFiles.Count:N0} files instantly.";
-        RefreshItems();
+        OnPropertyChanged(nameof(LastScanText));
+        OnPropertyChanged(nameof(SummaryText));
+
+        var when = FormatScanTime(result.CompletedUtc);
+        StatusText = restored
+            ? $"Restored scan of {result.Root.Name} from {when}. Scan again to refresh."
+            : $"Scan complete at {when}. Type in Search to filter {result.AllFiles.Count:N0} files instantly.";
+
+        if (persist)
+        {
+            PersistScan(result);
+        }
+    }
+
+    private void PersistScan(ScanResult result)
+    {
+        var path = _cachePath;
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                ScanCache.Save(result, path);
+            }
+            catch
+            {
+                PostToUi(() =>
+                {
+                    if (!IsScanning)
+                    {
+                        StatusText = "Scan complete, but saving the cache failed. Results are only in this session.";
+                    }
+                });
+            }
+        });
     }
 
     private bool TryGetSafeOpenPath(out string fullPath) =>
         LocalPathGuard.TryValidateOpenPath(SelectedEntry?.FullPath, _result, out fullPath);
 
-    private void RefreshItems()
+    private void ScheduleItemRefresh()
     {
-        Items.Clear();
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+        _searchCts = null;
 
-        if (!string.IsNullOrWhiteSpace(SearchText) && _result is not null)
+        if (string.IsNullOrWhiteSpace(SearchText) || _result is null)
         {
-            var matches = FileNameSearch.Filter(_result.AllFiles, SearchText).ToList();
-            foreach (var file in matches)
-            {
-                Items.Add(ToFileRow(file, _result.Root.Size));
-            }
-
-            StatusText = matches.Count == FileNameSearch.DefaultLimit
-                ? $"Showing first {FileNameSearch.DefaultLimit:N0} matches for \"{SearchText.Trim()}\""
-                : $"{matches.Count:N0} files match \"{SearchText.Trim()}\"";
+            _searchGeneration++;
+            ShowFolderContents();
             return;
         }
 
+        var generation = ++_searchGeneration;
+        var query = SearchText;
+        var cts = new CancellationTokenSource();
+        _searchCts = cts;
+        _ = SearchAsync(generation, query, cts.Token);
+    }
+
+    private async Task SearchAsync(int generation, string query, CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(SearchDebounce, token);
+            var snapshot = _result;
+            if (snapshot is null || generation != _searchGeneration)
+            {
+                return;
+            }
+
+            var rootSize = snapshot.Root.Size;
+            var rows = await Task.Run(() =>
+            {
+                var matches = FileNameSearch.Filter(snapshot.AllFiles, query);
+                return matches.Select(file => ToFileRow(file, rootSize)).ToList();
+            }, token);
+
+            if (generation != _searchGeneration)
+            {
+                return;
+            }
+
+            PostToUi(() =>
+            {
+                if (generation != _searchGeneration)
+                {
+                    return;
+                }
+
+                ReplaceItems(rows);
+                StatusText = rows.Count == FileNameSearch.DefaultLimit
+                    ? $"Showing first {FileNameSearch.DefaultLimit:N0} matches for \"{query.Trim()}\""
+                    : $"{rows.Count:N0} files match \"{query.Trim()}\"";
+            });
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void ShowFolderContents()
+    {
         if (SelectedFolder is null)
         {
+            ReplaceItems([]);
             return;
         }
 
         var parentSize = SelectedFolder.Size;
+        var rows = new List<EntryRow>(SelectedFolder.Folders.Count + SelectedFolder.Files.Count);
         foreach (var folder in SelectedFolder.Folders)
         {
-            Items.Add(new EntryRow
+            rows.Add(new EntryRow
             {
                 Name = folder.Name,
                 FullPath = folder.FullPath,
@@ -414,14 +538,36 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         foreach (var file in SelectedFolder.Files)
         {
-            Items.Add(ToFileRow(file, parentSize));
+            rows.Add(ToFileRow(file, parentSize));
         }
 
-        if (_result is not null && !IsScanning)
+        ReplaceItems(rows);
+
+        if (_result is not null && !IsScanning && string.IsNullOrWhiteSpace(SearchText))
         {
             StatusText = $"{SelectedFolder.Folders.Count:N0} folders, {SelectedFolder.Files.Count:N0} files in {SelectedFolder.Name}";
         }
     }
+
+    private void ReplaceItems(IReadOnlyList<EntryRow> rows)
+    {
+        SelectedEntry = null;
+        Items = new ObservableCollection<EntryRow>(rows);
+    }
+
+    private void PostToUi(Action action)
+    {
+        if (_ui is null || SynchronizationContext.Current == _ui)
+        {
+            action();
+            return;
+        }
+
+        _ui.Post(_ => action(), null);
+    }
+
+    private static string FormatScanTime(DateTime utc) =>
+        (utc == default ? DateTime.UtcNow : utc).ToLocalTime().ToString("yyyy-MM-dd HH:mm");
 
     private static EntryRow ToFileRow(FileEntry file, long parentSize) => new()
     {

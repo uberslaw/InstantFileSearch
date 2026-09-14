@@ -73,6 +73,7 @@ public class FileScannerTests
             Assert.Equal("huge", result.Root.Folders[0].Name);
             Assert.Equal(4096, result.Root.Folders[0].Size);
             Assert.Equal(3, result.AllFiles.Count);
+            Assert.True(DateTime.UtcNow - result.CompletedUtc < TimeSpan.FromMinutes(1));
             Assert.Single(FileNameSearch.Filter(result.AllFiles, "*.txt"));
             Assert.Single(FileNameSearch.Filter(result.AllFiles, "video"));
         }

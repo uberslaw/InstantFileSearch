@@ -55,6 +55,7 @@ public sealed class FileScanner
             AllFiles = files,
             Duration = clock.Elapsed,
             ErrorCount = errorCount,
+            CompletedUtc = DateTime.UtcNow,
         };
     }
 
