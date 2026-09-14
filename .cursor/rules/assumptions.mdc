@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Identify, research, fix assumptions
 
-Applies to **every code change** (implement, fix, refactor, Launch Control, tests). Skip only when the user asked a question and you make **no edits**.
+This is a Cursor **project rule** (`alwaysApply: true`), not a skill. It is injected when this file is on the checkout. Applies to **every code change** (implement, fix, refactor, Launch Control, tests). Skip only when the user asked a question and you make **no edits**.
 
 ## Identify
 
@@ -13,7 +13,7 @@ Before/while editing, list the assumptions the change relies on. Silent guesses 
 
 ## Research
 
-Verify each against repo code, README, tests, and nearby docs. Grep/read; do not invent. If you cannot verify, say so and pick the safer encoding.
+Verify each against repo code, README, tests, and nearby docs. Grep/read; do not invent. If you cannot verify, say so and pick the safer encoding. Launch Control changes must also match the Master Launch Control contract (scan `*LaunchControl*.cmd`, Generic sidecar, no `start ""`, `LaunchControl.Standard` discovery). A README or comment that disagrees with the code is a false assumption.
 
 ## Fix
 
