@@ -86,7 +86,7 @@
                           ItemsSource="{Binding TreeRoots}"
                           SelectedItemChanged="FolderTree_SelectedItemChanged"
                           VirtualizingStackPanel.IsVirtualizing="True"
-                          VirtualizingStackPanel.VirtualizationMode="Recycling">
+                          VirtualizingStackPanel.VirtualizationMode="Standard">
                     <TreeView.ItemTemplate>
                         <HierarchicalDataTemplate ItemsSource="{Binding Folders}">
                             <Grid Margin="0,1">

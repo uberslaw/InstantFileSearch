@@ -12,6 +12,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 {
     private readonly FileScanner _scanner = new();
     private CancellationTokenSource? _scanCts;
+    private int _scanGeneration;
     private ScanResult? _result;
     private string _scanPath = "";
     private string _searchText = "";
@@ -195,8 +196,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         ScanPath = path;
 
-        _scanCts?.Dispose();
-        _scanCts = new CancellationTokenSource();
+        var cts = new CancellationTokenSource();
+        var previous = _scanCts;
+        _scanCts = cts;
+        previous?.Dispose();
+        var generation = ++_scanGeneration;
+        var token = cts.Token;
+
         IsScanning = true;
         OnPropertyChanged(nameof(IsIdle));
         FilesScanned = 0;
@@ -207,6 +213,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         var progress = new Progress<ScanProgress>(p =>
         {
+            if (generation != _scanGeneration)
+            {
+                return;
+            }
+
             FilesScanned = p.Files;
             FoldersScanned = p.Folders;
             _bytesScanned = p.Bytes;
@@ -217,24 +228,44 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         try
         {
-            var result = await Task.Run(() => _scanner.Scan(path, progress, _scanCts.Token), _scanCts.Token);
+            var result = await Task.Run(() => _scanner.Scan(path, progress, token), token);
+            if (generation != _scanGeneration)
+            {
+                return;
+            }
+
             ApplyCompletedScan(result);
         }
         catch (OperationCanceledException)
         {
-            StatusText = "Scan cancelled.";
+            if (generation != _scanGeneration)
+            {
+                return;
+            }
+
+            StatusText = _result is null
+                ? "Scan cancelled."
+                : "Scan cancelled. Previous results kept.";
             ProgressPath = "";
         }
         catch (Exception ex)
         {
+            if (generation != _scanGeneration)
+            {
+                return;
+            }
+
             StatusText = "Scan failed: " + ex.Message;
             ProgressPath = "";
         }
         finally
         {
-            IsScanning = false;
-            OnPropertyChanged(nameof(IsIdle));
-            OnPropertyChanged(nameof(SummaryText));
+            if (generation == _scanGeneration)
+            {
+                IsScanning = false;
+                OnPropertyChanged(nameof(IsIdle));
+                OnPropertyChanged(nameof(SummaryText));
+            }
         }
     }
 
@@ -354,8 +385,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 Items.Add(ToFileRow(file, _result.Root.Size));
             }
 
-            StatusText = matches.Count == 5000
-                ? $"Showing first 5,000 matches for \"{SearchText.Trim()}\""
+            StatusText = matches.Count == FileNameSearch.DefaultLimit
+                ? $"Showing first {FileNameSearch.DefaultLimit:N0} matches for \"{SearchText.Trim()}\""
                 : $"{matches.Count:N0} files match \"{SearchText.Trim()}\"";
             return;
         }
