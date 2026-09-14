@@ -18,9 +18,9 @@ public static class ScanCache
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "InstantFileSearch",
-            "last-scan.json");
+            "last-scan.bin");
 
-    public static void Save(ScanResult result, string filePath)
+    public static void Save(ScanResult result, string filePath, IByteProtector? protector = null)
     {
         ArgumentNullException.ThrowIfNull(result);
         if (string.IsNullOrWhiteSpace(filePath))
@@ -28,11 +28,7 @@ public static class ScanCache
             throw new ArgumentException("A cache path is required.", nameof(filePath));
         }
 
-        var directory = Path.GetDirectoryName(filePath);
-        if (!string.IsNullOrEmpty(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
+        protector ??= ByteProtector.CreateDefault();
 
         var document = new ScanCacheDocument
         {
@@ -43,22 +39,42 @@ public static class ScanCache
             Root = FromFolder(result.Root),
         };
 
-        var tmp = filePath + ".tmp";
-        File.WriteAllText(tmp, JsonSerializer.Serialize(document, Json));
-        File.Move(tmp, filePath, overwrite: true);
+        var json = JsonSerializer.Serialize(document, Json);
+        ProtectedFile.WriteAll(filePath, System.Text.Encoding.UTF8.GetBytes(json), protector);
     }
 
-    public static bool TryLoad(string filePath, out ScanResult? result)
+    public static bool TryLoad(string filePath, out ScanResult? result, IByteProtector? protector = null)
     {
         result = null;
-        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        protector ??= ByteProtector.CreateDefault();
+        if (string.IsNullOrWhiteSpace(filePath))
         {
             return false;
         }
 
+        byte[] bytes;
+        if (ProtectedFile.TryReadAll(filePath, protector, out bytes))
+        {
+            return TryParse(bytes, out result);
+        }
+
+        var legacyJson = Path.ChangeExtension(filePath, ".json");
+        if (!filePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+            && File.Exists(legacyJson)
+            && ProtectedFile.TryReadAll(legacyJson, protector, out bytes))
+        {
+            return TryParse(bytes, out result);
+        }
+
+        return false;
+    }
+
+    private static bool TryParse(byte[] bytes, out ScanResult? result)
+    {
+        result = null;
         try
         {
-            var json = File.ReadAllText(filePath);
+            var json = System.Text.Encoding.UTF8.GetString(bytes);
             var document = JsonSerializer.Deserialize<ScanCacheDocument>(json, Json);
             if (document is null || document.Version != CurrentVersion || document.Root is null)
             {

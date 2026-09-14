@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\InstantFileSearch.Core\InstantFileSearch.Core.csproj" />
+    <ProjectReference Include="..\..\src\InstantFileSearch.Cli\InstantFileSearch.Cli.csproj" />
   </ItemGroup>
 
   <ItemGroup>

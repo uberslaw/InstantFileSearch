@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>InstantFileSearch.Cli</RootNamespace>
+    <AssemblyName>InstantFileSearch.Cli</AssemblyName>
+    <Description>Command-line scan, search, and exclude for Instant File Search.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\InstantFileSearch.Core\InstantFileSearch.Core.csproj" />
+  </ItemGroup>
+
+</Project>

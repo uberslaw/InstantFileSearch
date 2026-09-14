@@ -14,7 +14,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private readonly FileScanner _scanner = new();
     private readonly string _cachePath;
+    private readonly string _exclusionsPath;
+    private readonly IByteProtector _protector;
     private readonly SynchronizationContext? _ui = SynchronizationContext.Current;
+    private FolderExclusionSet _exclusions;
     private CancellationTokenSource? _scanCts;
     private CancellationTokenSource? _searchCts;
     private int _scanGeneration;
@@ -31,15 +34,22 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private string _progressPath = "";
     private ObservableCollection<EntryRow> _items = [];
 
-    public MainViewModel(string? cachePath = null)
+    public MainViewModel(string? cachePath = null, string? exclusionsPath = null, IByteProtector? protector = null)
     {
+        _protector = protector ?? ByteProtector.CreateDefault();
         _cachePath = string.IsNullOrWhiteSpace(cachePath) ? ScanCache.DefaultFilePath : cachePath;
+        _exclusionsPath = string.IsNullOrWhiteSpace(exclusionsPath) ? ExclusionStore.DefaultFilePath : exclusionsPath;
+        _exclusions = ExclusionStore.Load(_exclusionsPath, _protector);
         BrowseCommand = new RelayCommand(Browse, () => !IsScanning);
         ScanCommand = new RelayCommand(async () => await ScanAsync(), () => !IsScanning);
         CancelCommand = new RelayCommand(Cancel, () => IsScanning);
         OpenCommand = new RelayCommand(OpenSelected, () => SelectedEntry is not null);
         ShowInExplorerCommand = new RelayCommand(ShowInExplorer, () => SelectedEntry is not null);
         CopyPathCommand = new RelayCommand(CopyPath, () => SelectedEntry is not null);
+        ExcludeFolderCommand = new RelayCommand(ExcludeSelectedFolder, CanExcludeSelectedFolder);
+        RemoveExclusionCommand = new RelayCommand(RemoveSelectedExclusion, () => SelectedExclusion is not null);
+        ShowExclusionsCommand = new RelayCommand(ShowExclusions);
+        SyncExclusionPaths();
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -52,12 +62,31 @@ public sealed class MainViewModel : INotifyPropertyChanged
         private set => SetField(ref _items, value);
     }
 
+    public ObservableCollection<string> ExclusionPaths { get; } = [];
+
     public ICommand BrowseCommand { get; }
     public ICommand ScanCommand { get; }
     public ICommand CancelCommand { get; }
     public ICommand OpenCommand { get; }
     public ICommand ShowInExplorerCommand { get; }
     public ICommand CopyPathCommand { get; }
+    public ICommand ExcludeFolderCommand { get; }
+    public ICommand RemoveExclusionCommand { get; }
+    public ICommand ShowExclusionsCommand { get; }
+
+    public string? SelectedExclusion
+    {
+        get => _selectedExclusion;
+        set
+        {
+            if (SetField(ref _selectedExclusion, value))
+            {
+                ((RelayCommand)RemoveExclusionCommand).RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    private string? _selectedExclusion;
 
     public string ScanPath
     {
@@ -99,6 +128,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 ((RelayCommand)BrowseCommand).RaiseCanExecuteChanged();
                 ((RelayCommand)ScanCommand).RaiseCanExecuteChanged();
                 ((RelayCommand)CancelCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)ExcludeFolderCommand).RaiseCanExecuteChanged();
             }
         }
     }
@@ -128,6 +158,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             }
 
             OnPropertyChanged();
+            ((RelayCommand)ExcludeFolderCommand).RaiseCanExecuteChanged();
             if (string.IsNullOrWhiteSpace(SearchText))
             {
                 ShowFolderContents();
@@ -145,6 +176,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 ((RelayCommand)OpenCommand).RaiseCanExecuteChanged();
                 ((RelayCommand)ShowInExplorerCommand).RaiseCanExecuteChanged();
                 ((RelayCommand)CopyPathCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)ExcludeFolderCommand).RaiseCanExecuteChanged();
             }
         }
     }
@@ -246,7 +278,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         try
         {
-            var result = await Task.Run(() => _scanner.Scan(path, progress, token), token);
+            var result = await Task.Run(() => _scanner.Scan(path, progress, token, _exclusions.Items), token);
             if (generation != _scanGeneration)
             {
                 return;
@@ -358,6 +390,113 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    private bool CanExcludeSelectedFolder()
+    {
+        if (IsScanning)
+        {
+            return false;
+        }
+
+        if (SelectedEntry is { IsFolder: true, Folder.Parent: not null })
+        {
+            return true;
+        }
+
+        return SelectedFolder?.Parent is not null;
+    }
+
+    public void ExcludeSelectedFolder()
+    {
+        var node = SelectedEntry is { IsFolder: true, Folder: not null }
+            ? SelectedEntry.Folder
+            : SelectedFolder;
+        if (node?.Parent is null)
+        {
+            StatusText = "The scan root cannot be excluded.";
+            return;
+        }
+
+        if (!_exclusions.Add(node.FullPath))
+        {
+            StatusText = "That folder is already excluded.";
+            return;
+        }
+
+        ExclusionStore.Save(_exclusions, _exclusionsPath, _protector);
+        SyncExclusionPaths();
+        PruneExcludedFolder(node);
+        StatusText = $"Excluded {node.Name}. Future scans skip it too.";
+    }
+
+    public void RemoveSelectedExclusion()
+    {
+        if (SelectedExclusion is null)
+        {
+            return;
+        }
+
+        _exclusions.Remove(SelectedExclusion);
+        ExclusionStore.Save(_exclusions, _exclusionsPath, _protector);
+        SyncExclusionPaths();
+        SelectedExclusion = null;
+        StatusText = "Exclusion removed. Scan again to include that folder.";
+    }
+
+    public void ShowExclusions()
+    {
+        var window = new ExclusionsWindow
+        {
+            Owner = Application.Current?.MainWindow,
+            DataContext = this,
+        };
+        window.ShowDialog();
+    }
+
+    private void SyncExclusionPaths()
+    {
+        ExclusionPaths.Clear();
+        foreach (var path in _exclusions.Items)
+        {
+            ExclusionPaths.Add(path);
+        }
+    }
+
+    private void PruneExcludedFolder(FolderNode node)
+    {
+        if (_result is null || node.Parent is null)
+        {
+            return;
+        }
+
+        var parent = node.Parent;
+        parent.Folders.Remove(node);
+        for (var walk = parent; walk is not null; walk = walk.Parent)
+        {
+            walk.Size = Math.Max(0, walk.Size - node.Size);
+            walk.FileCount = Math.Max(0, walk.FileCount - node.FileCount);
+            walk.FolderCount = Math.Max(0, walk.FolderCount - 1 - node.FolderCount);
+        }
+
+        var remaining = _result.AllFiles
+            .Where(file => !LocalPathGuard.IsSameOrUnder(file.FullPath, node.FullPath))
+            .ToList();
+        _result = new ScanResult
+        {
+            Root = _result.Root,
+            AllFiles = remaining,
+            Duration = _result.Duration,
+            ErrorCount = _result.ErrorCount,
+            CompletedUtc = _result.CompletedUtc,
+        };
+
+        TreeRoots.Clear();
+        TreeRoots.Add(_result.Root);
+        SelectedFolder = parent;
+        PersistScan(_result);
+        OnPropertyChanged(nameof(SummaryText));
+        OnPropertyChanged(nameof(LastScanText));
+    }
+
     private void Browse()
     {
         var dialog = new OpenFolderDialog
@@ -385,7 +524,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         return Task.Run(() =>
         {
-            if (!ScanCache.TryLoad(_cachePath, out var cached) || cached is null)
+            if (!ScanCache.TryLoad(_cachePath, out var cached, _protector) || cached is null)
             {
                 return;
             }
@@ -432,7 +571,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             try
             {
-                ScanCache.Save(result, path);
+                ScanCache.Save(result, path, _protector);
             }
             catch
             {

@@ -9,6 +9,8 @@ Windows disk explorer in the TreeSize mold: scan a folder, see the largest direc
 - Lists files and subfolders for the selected directory
 - Instant search across the scanned index (`*.log`, `report`, full path text; first 5,000 matches). Typing is debounced (200 ms) and filtered off the UI thread.
 - Restores the last successful scan from disk on launch (including when it ran); Scan again to refresh.
+- Right-click a folder to exclude it from this view and future scans (`Scan` → Excluded folders… to undo)
+- CLI for scan / search / status / exclude (same encrypted cache as the GUI)
 - Open, Show in Explorer, copy path; drag a folder onto the window to scan it
 
 ## Run
@@ -18,6 +20,7 @@ Needs **Windows** and the **.NET 8 Desktop Runtime** (or the SDK). No network, n
 ```powershell
 dotnet test tests/InstantFileSearch.Tests/InstantFileSearch.Tests.csproj
 dotnet run --project src/InstantFileSearch/InstantFileSearch.csproj
+dotnet run --project src/InstantFileSearch.Cli -- help
 ```
 
 `InstantFileSearch.slnx` is for Visual Studio. `dotnet test InstantFileSearch.slnx` needs the .NET 9 SDK (SDK 8 cannot load `.slnx`).
@@ -28,7 +31,7 @@ Self-contained exe (no runtime install on the target PC):
 .\publish.ps1
 ```
 
-Output is `dist\InstantFileSearch.exe`.
+Output is `dist\InstantFileSearch.exe` and `dist\InstantFileSearch.Cli.exe`.
 
 ## Use
 
@@ -37,6 +40,21 @@ Output is `dist\InstantFileSearch.exe`.
 3. Click folders on the left (largest at the top)
 4. Type in Search to filter files (`Ctrl+F`)
 5. Close and reopen: the last scan and its time come back from `%LocalAppData%\InstantFileSearch`
+6. Right-click a folder → Exclude folder to skip it next time
+
+## CLI
+
+The GUI is still the right place for the size tree. A console app covers the same scan/search/exclude/status work and shares the encrypted cache:
+
+```powershell
+dotnet run --project src/InstantFileSearch.Cli -- scan C:\Work
+dotnet run --project src/InstantFileSearch.Cli -- search *.log
+dotnet run --project src/InstantFileSearch.Cli -- status
+dotnet run --project src/InstantFileSearch.Cli -- exclude add C:\Work\node_modules
+dotnet run --project src/InstantFileSearch.Cli -- exclude list
+```
+
+Launch Control → Open CLI starts at the repo root with those commands in the banner.
 
 Scanning `C:\` is allowed but slow and will skip folders you cannot read. Start with a project or user folder.
 
@@ -72,4 +90,4 @@ There is no Windows service and no Python/venv UI.
 - Runtime: Windows x64, .NET 8 Desktop (or the self-contained publish)
 - Network: none
 - Permissions: read access to the folder you scan; no elevation required
-- Data: the last successful scan is saved under `%LocalAppData%\InstantFileSearch\last-scan.json` (not the install folder). It is a snapshot, not a live disk view.
+- Data: the last successful scan is `%LocalAppData%\InstantFileSearch\last-scan.bin`, DPAPI-encrypted for the current Windows user (other local accounts cannot read it). Exclusions are `%LocalAppData%\InstantFileSearch\exclusions.bin`, same protection. It is a snapshot, not a live disk view. Administrators on the same machine can still access a logged-in user's DPAPI data.

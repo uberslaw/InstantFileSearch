@@ -20,3 +20,17 @@ if (-not (Test-Path $exe)) {
 }
 
 Write-Host "Published $exe"
+
+$cliProject = Join-Path $root "src\InstantFileSearch.Cli\InstantFileSearch.Cli.csproj"
+dotnet publish $cliProject -c Release -r win-x64 --self-contained false `
+    -p:DebugType=none `
+    -p:DebugSymbols=false `
+    -o $out
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+Get-ChildItem $out -Filter *.pdb -ErrorAction SilentlyContinue | Remove-Item -Force
+$cli = Join-Path $out "InstantFileSearch.Cli.exe"
+if (-not (Test-Path $cli)) {
+    Write-Error "Publish finished but $cli was not created."
+    exit 1
+}
+Write-Host "Published $cli"

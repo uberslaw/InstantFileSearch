@@ -26,6 +26,9 @@
             </MenuItem>
             <MenuItem Header="_Scan">
                 <MenuItem Header="_Cancel" Command="{Binding CancelCommand}" InputGestureText="Esc"/>
+                <Separator/>
+                <MenuItem Header="Exclude selected folder" Command="{Binding ExcludeFolderCommand}"/>
+                <MenuItem Header="Excluded folders…" Command="{Binding ShowExclusionsCommand}"/>
             </MenuItem>
         </Menu>
 
@@ -89,8 +92,14 @@
                 <TreeView x:Name="FolderTree"
                           ItemsSource="{Binding TreeRoots}"
                           SelectedItemChanged="FolderTree_SelectedItemChanged"
+                          PreviewMouseRightButtonDown="FolderTree_PreviewMouseRightButtonDown"
                           VirtualizingStackPanel.IsVirtualizing="True"
                           VirtualizingStackPanel.VirtualizationMode="Standard">
+                    <TreeView.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Exclude folder" Command="{Binding ExcludeFolderCommand}"/>
+                        </ContextMenu>
+                    </TreeView.ContextMenu>
                     <TreeView.ItemTemplate>
                         <HierarchicalDataTemplate ItemsSource="{Binding Folders}">
                             <Grid Margin="0,1">
@@ -150,6 +159,7 @@
                             <MenuItem Header="Open" Command="{Binding OpenCommand}"/>
                             <MenuItem Header="Show in Explorer" Command="{Binding ShowInExplorerCommand}"/>
                             <MenuItem Header="Copy path" Command="{Binding CopyPathCommand}"/>
+                            <MenuItem Header="Exclude folder" Command="{Binding ExcludeFolderCommand}"/>
                         </ContextMenu>
                     </DataGrid.ContextMenu>
                     <DataGrid.Columns>

@@ -15,7 +15,8 @@ public sealed class FileScanner
     public ScanResult Scan(
         string rootPath,
         IProgress<ScanProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IEnumerable<string>? excludeDirectories = null)
     {
         if (string.IsNullOrWhiteSpace(rootPath))
         {
@@ -32,6 +33,7 @@ public sealed class FileScanner
             throw new DirectoryNotFoundException($"Folder not found: {fullRoot}");
         }
 
+        var exclusions = FolderExclusionSet.From(excludeDirectories);
         var clock = Stopwatch.StartNew();
         var files = new List<FileEntry>();
         var errorCount = 0;
@@ -44,7 +46,8 @@ public sealed class FileScanner
             ref errorCount,
             state,
             progress,
-            cancellationToken);
+            cancellationToken,
+            exclusions);
 
         SortTree(root);
         clock.Stop();
@@ -66,7 +69,8 @@ public sealed class FileScanner
         ref int errorCount,
         ScanState state,
         IProgress<ScanProgress>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        FolderExclusionSet exclusions)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -121,6 +125,11 @@ public sealed class FileScanner
                 }
                 else if (entry is DirectoryInfo childDir)
                 {
+                    if (exclusions.Contains(childDir.FullName))
+                    {
+                        continue;
+                    }
+
                     var child = ScanDirectory(
                         childDir,
                         node,
@@ -128,7 +137,8 @@ public sealed class FileScanner
                         ref errorCount,
                         state,
                         progress,
-                        cancellationToken);
+                        cancellationToken,
+                        exclusions);
                     node.Folders.Add(child);
                     node.Size += child.Size;
                     node.FileCount += child.FileCount;

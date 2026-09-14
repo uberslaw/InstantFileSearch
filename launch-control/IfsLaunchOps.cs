@@ -411,7 +411,7 @@ internal static class IfsLaunchOps
         }
 
         const string banner =
-            "echo Instant File Search repo. & echo Useful: & echo   dotnet test tests\\InstantFileSearch.Tests\\InstantFileSearch.Tests.csproj & echo   dotnet run --project src\\InstantFileSearch\\InstantFileSearch.csproj & echo   .\\publish.ps1";
+            "echo Instant File Search repo. & echo Useful: & echo   dotnet run --project src\\InstantFileSearch.Cli -- help & echo   dotnet run --project src\\InstantFileSearch.Cli -- scan . & echo   dotnet test tests\\InstantFileSearch.Tests\\InstantFileSearch.Tests.csproj & echo   .\\publish.ps1";
 
         try
         {

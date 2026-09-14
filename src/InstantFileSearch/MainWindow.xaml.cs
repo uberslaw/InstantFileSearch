@@ -2,6 +2,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 
 namespace InstantFileSearch;
 
@@ -23,6 +24,30 @@ public partial class MainWindow : Window
     private void FolderTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
         Vm.SelectedFolder = e.NewValue as FolderNode;
+    }
+
+    private void FolderTree_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (FindTreeViewItem(e.OriginalSource as DependencyObject) is { } item)
+        {
+            item.IsSelected = true;
+            e.Handled = false;
+        }
+    }
+
+    private static TreeViewItem? FindTreeViewItem(DependencyObject? current)
+    {
+        while (current is not null)
+        {
+            if (current is TreeViewItem item)
+            {
+                return item;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return null;
     }
 
     private void EntryGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e)

@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/InstantFileSearch.Core/InstantFileSearch.Core.csproj" />
     <Project Path="src/InstantFileSearch/InstantFileSearch.csproj" />
+    <Project Path="src/InstantFileSearch.Cli/InstantFileSearch.Cli.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/InstantFileSearch.Tests/InstantFileSearch.Tests.csproj" />
