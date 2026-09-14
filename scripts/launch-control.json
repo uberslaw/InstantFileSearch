@@ -1,0 +1,10 @@
+{
+  "productId": "instantfilesearch",
+  "productName": "Instant File Search",
+  "serviceNames": [],
+  "installExe": "../src/InstantFileSearch/bin/Release/net8.0-windows/InstantFileSearch.exe",
+  "logDirs": ["%LOCALAPPDATA%\\InstantFileSearch\\logs"],
+  "logPaths": ["%LOCALAPPDATA%\\InstantFileSearch\\logs\\ops.log"],
+  "showVenvUi": false,
+  "showBrowser": false
+}
