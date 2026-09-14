@@ -5,7 +5,7 @@ namespace InstantFileSearch;
 
 public static class ScanCache
 {
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
 
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -20,25 +20,40 @@ public static class ScanCache
             "InstantFileSearch",
             "last-scan.bin");
 
-    public static void Save(ScanResult result, string filePath, IByteProtector? protector = null)
+    public static IReadOnlyList<ScanResult> Upsert(IReadOnlyList<ScanResult>? existing, ScanResult incoming)
     {
-        ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(incoming);
+        var list = existing?.ToList() ?? [];
+        var index = list.FindIndex(scan => SameRoot(scan, incoming));
+        if (index >= 0)
+        {
+            list[index] = incoming;
+        }
+        else
+        {
+            list.Add(incoming);
+        }
+
+        return list;
+    }
+
+    public static void Save(ScanResult result, string filePath, IByteProtector? protector = null) =>
+        SaveAll([result], filePath, protector);
+
+    public static void SaveAll(IReadOnlyList<ScanResult> results, string filePath, IByteProtector? protector = null)
+    {
+        ArgumentNullException.ThrowIfNull(results);
         if (string.IsNullOrWhiteSpace(filePath))
         {
             throw new ArgumentException("A cache path is required.", nameof(filePath));
         }
 
         protector ??= ByteProtector.CreateDefault();
-
         var document = new ScanCacheDocument
         {
             Version = CurrentVersion,
-            CompletedUtc = result.CompletedUtc == default ? DateTime.UtcNow : result.CompletedUtc,
-            DurationSeconds = result.Duration.TotalSeconds,
-            ErrorCount = result.ErrorCount,
-            Root = FromFolder(result.Root),
+            Scans = results.Select(ToRecord).ToList(),
         };
-
         var json = JsonSerializer.Serialize(document, Json);
         ProtectedFile.WriteAll(filePath, System.Text.Encoding.UTF8.GetBytes(json), protector);
     }
@@ -46,6 +61,18 @@ public static class ScanCache
     public static bool TryLoad(string filePath, out ScanResult? result, IByteProtector? protector = null)
     {
         result = null;
+        if (!TryLoadAll(filePath, out var all, protector) || all.Count == 0)
+        {
+            return false;
+        }
+
+        result = all[0];
+        return true;
+    }
+
+    public static bool TryLoadAll(string filePath, out IReadOnlyList<ScanResult> results, IByteProtector? protector = null)
+    {
+        results = [];
         protector ??= ByteProtector.CreateDefault();
         if (string.IsNullOrWhiteSpace(filePath))
         {
@@ -53,56 +80,96 @@ public static class ScanCache
         }
 
         byte[] bytes;
-        if (ProtectedFile.TryReadAll(filePath, protector, out bytes))
+        if (ProtectedFile.TryReadAll(filePath, protector, out bytes)
+            && TryParse(bytes, out var parsed))
         {
-            return TryParse(bytes, out result);
+            results = parsed;
+            return parsed.Count > 0;
         }
 
         var legacyJson = Path.ChangeExtension(filePath, ".json");
         if (!filePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
             && File.Exists(legacyJson)
-            && ProtectedFile.TryReadAll(legacyJson, protector, out bytes))
+            && ProtectedFile.TryReadAll(legacyJson, protector, out bytes)
+            && TryParse(bytes, out parsed))
         {
-            return TryParse(bytes, out result);
+            results = parsed;
+            return parsed.Count > 0;
         }
 
         return false;
     }
 
-    private static bool TryParse(byte[] bytes, out ScanResult? result)
+    private static bool SameRoot(ScanResult left, ScanResult right) =>
+        LocalPathGuard.TryGetFullPath(left.Root.FullPath, out var a)
+        && LocalPathGuard.TryGetFullPath(right.Root.FullPath, out var b)
+        && a.Equals(b, LocalPathGuard.Comparison);
+
+    private static ScanRecord ToRecord(ScanResult result) => new()
     {
-        result = null;
+        CompletedUtc = result.CompletedUtc == default ? DateTime.UtcNow : result.CompletedUtc,
+        DurationSeconds = result.Duration.TotalSeconds,
+        ErrorCount = result.ErrorCount,
+        Root = FromFolder(result.Root),
+    };
+
+    private static bool TryParse(byte[] bytes, out IReadOnlyList<ScanResult> results)
+    {
+        results = [];
         try
         {
             var json = System.Text.Encoding.UTF8.GetString(bytes);
             var document = JsonSerializer.Deserialize<ScanCacheDocument>(json, Json);
-            if (document is null || document.Version != CurrentVersion || document.Root is null)
+            if (document is null || document.Version is not (1 or 2))
             {
                 return false;
             }
 
-            if (string.IsNullOrWhiteSpace(document.Root.Name) ||
-                string.IsNullOrWhiteSpace(document.Root.FullPath))
+            var records = new List<ScanRecord>();
+            if (document.Scans is { Count: > 0 })
             {
-                return false;
+                records.AddRange(document.Scans);
+            }
+            else if (document.Root is not null)
+            {
+                records.Add(new ScanRecord
+                {
+                    CompletedUtc = document.CompletedUtc,
+                    DurationSeconds = document.DurationSeconds,
+                    ErrorCount = document.ErrorCount,
+                    Root = document.Root,
+                });
             }
 
-            var files = new List<FileEntry>();
-            var root = ToFolder(document.Root, parent: null, files);
-            if (root.ScanDuration <= TimeSpan.Zero && document.DurationSeconds > 0)
+            var parsed = new List<ScanResult>();
+            foreach (var record in records)
             {
-                root.ScanDuration = TimeSpan.FromSeconds(document.DurationSeconds);
+                if (record.Root is null
+                    || string.IsNullOrWhiteSpace(record.Root.Name)
+                    || string.IsNullOrWhiteSpace(record.Root.FullPath))
+                {
+                    continue;
+                }
+
+                var files = new List<FileEntry>();
+                var root = ToFolder(record.Root, parent: null, files);
+                if (root.ScanDuration <= TimeSpan.Zero && record.DurationSeconds > 0)
+                {
+                    root.ScanDuration = TimeSpan.FromSeconds(record.DurationSeconds);
+                }
+
+                parsed.Add(new ScanResult
+                {
+                    Root = root,
+                    AllFiles = files,
+                    Duration = TimeSpan.FromSeconds(Math.Max(0, record.DurationSeconds)),
+                    ErrorCount = Math.Max(0, record.ErrorCount),
+                    CompletedUtc = record.CompletedUtc == default ? DateTime.UtcNow : record.CompletedUtc,
+                });
             }
 
-            result = new ScanResult
-            {
-                Root = root,
-                AllFiles = files,
-                Duration = TimeSpan.FromSeconds(Math.Max(0, document.DurationSeconds)),
-                ErrorCount = Math.Max(0, document.ErrorCount),
-                CompletedUtc = document.CompletedUtc == default ? DateTime.UtcNow : document.CompletedUtc,
-            };
-            return true;
+            results = parsed;
+            return parsed.Count > 0;
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or NotSupportedException)
         {
@@ -186,6 +253,15 @@ public static class ScanCache
     private sealed class ScanCacheDocument
     {
         public int Version { get; set; }
+        public DateTime CompletedUtc { get; set; }
+        public double DurationSeconds { get; set; }
+        public int ErrorCount { get; set; }
+        public FolderRecord? Root { get; set; }
+        public List<ScanRecord>? Scans { get; set; }
+    }
+
+    private sealed class ScanRecord
+    {
         public DateTime CompletedUtc { get; set; }
         public double DurationSeconds { get; set; }
         public int ErrorCount { get; set; }

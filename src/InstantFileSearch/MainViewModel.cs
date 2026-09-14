@@ -22,7 +22,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private CancellationTokenSource? _searchCts;
     private int _scanGeneration;
     private int _searchGeneration;
-    private ScanResult? _result;
+    private readonly List<ScanResult> _scans = [];
     private string _scanPath = "";
     private string _searchText = "";
     private string _statusText = "Choose a folder and scan. Drop a folder on the window to start.";
@@ -47,6 +47,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ShowInExplorerCommand = new RelayCommand(ShowInExplorer, () => SelectedEntry is not null);
         CopyPathCommand = new RelayCommand(CopyPath, () => SelectedEntry is not null);
         ExcludeFolderCommand = new RelayCommand(ExcludeSelectedFolder, CanExcludeSelectedFolder);
+        RemoveScanCommand = new RelayCommand(RemoveSelectedScan, CanRemoveSelectedScan);
         RemoveExclusionCommand = new RelayCommand(RemoveSelectedExclusion, () => SelectedExclusion is not null);
         ShowExclusionsCommand = new RelayCommand(ShowExclusions);
         SyncExclusionPaths();
@@ -71,6 +72,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public ICommand ShowInExplorerCommand { get; }
     public ICommand CopyPathCommand { get; }
     public ICommand ExcludeFolderCommand { get; }
+    public ICommand RemoveScanCommand { get; }
     public ICommand RemoveExclusionCommand { get; }
     public ICommand ShowExclusionsCommand { get; }
 
@@ -129,6 +131,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 ((RelayCommand)ScanCommand).RaiseCanExecuteChanged();
                 ((RelayCommand)CancelCommand).RaiseCanExecuteChanged();
                 ((RelayCommand)ExcludeFolderCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)RemoveScanCommand).RaiseCanExecuteChanged();
             }
         }
     }
@@ -159,6 +162,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
             OnPropertyChanged();
             ((RelayCommand)ExcludeFolderCommand).RaiseCanExecuteChanged();
+            ((RelayCommand)RemoveScanCommand).RaiseCanExecuteChanged();
             if (string.IsNullOrWhiteSpace(SearchText))
             {
                 ShowFolderContents();
@@ -202,20 +206,28 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 return $"{ByteFormatter.ToString(_bytesScanned)}  ·  {FilesScanned:N0} files  ·  {FoldersScanned:N0} folders";
             }
 
-            if (_result is null)
+            if (_scans.Count == 0)
             {
                 return "No scan yet";
             }
 
-            var errors = _result.ErrorCount == 0 ? "" : $"  ·  {_result.ErrorCount:N0} skipped";
-            return $"{ByteFormatter.ToString(_result.Root.Size)}  ·  {_result.Root.FileCount:N0} files  ·  {_result.Root.FolderCount:N0} folders  ·  {_result.Duration.TotalSeconds:0.0}s{errors}";
+            var totalSize = _scans.Sum(scan => scan.Root.Size);
+            var totalFiles = _scans.Sum(scan => scan.Root.FileCount);
+            var places = _scans.Count == 1 ? "1 location" : $"{_scans.Count} locations";
+            return $"{places}  ·  {ByteFormatter.ToString(totalSize)}  ·  {totalFiles:N0} files";
         }
     }
 
-    public string LastScanText =>
-        _result is null || _result.CompletedUtc == default
-            ? ""
-            : "Last scan " + _result.CompletedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+    public string LastScanText
+    {
+        get
+        {
+            var latest = _scans.OrderByDescending(scan => scan.CompletedUtc).FirstOrDefault();
+            return latest is null || latest.CompletedUtc == default
+                ? ""
+                : "Last scan " + latest.CompletedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+        }
+    }
 
     private long _bytesScanned;
 
@@ -293,7 +305,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 return;
             }
 
-            StatusText = _result is null
+            StatusText = _scans.Count == 0
                 ? "Scan cancelled."
                 : "Scan cancelled. Previous results kept.";
             ProgressPath = "";
@@ -463,7 +475,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private void PruneExcludedFolder(FolderNode node)
     {
-        if (_result is null || node.Parent is null)
+        if (FindScan(node) is not { } scan || node.Parent is null)
         {
             return;
         }
@@ -477,22 +489,20 @@ public sealed class MainViewModel : INotifyPropertyChanged
             walk.FolderCount = Math.Max(0, walk.FolderCount - 1 - node.FolderCount);
         }
 
-        var remaining = _result.AllFiles
+        var remaining = scan.AllFiles
             .Where(file => !LocalPathGuard.IsSameOrUnder(file.FullPath, node.FullPath))
             .ToList();
-        _result = new ScanResult
+        ReplaceScan(scan, new ScanResult
         {
-            Root = _result.Root,
+            Root = scan.Root,
             AllFiles = remaining,
-            Duration = _result.Duration,
-            ErrorCount = _result.ErrorCount,
-            CompletedUtc = _result.CompletedUtc,
-        };
+            Duration = scan.Duration,
+            ErrorCount = scan.ErrorCount,
+            CompletedUtc = scan.CompletedUtc,
+        });
 
-        TreeRoots.Clear();
-        TreeRoots.Add(_result.Root);
-        SelectedFolder = parent;
-        PersistScan(_result);
+        RefreshTree(parent);
+        PersistAllScans();
         OnPropertyChanged(nameof(SummaryText));
         OnPropertyChanged(nameof(LastScanText));
     }
@@ -517,38 +527,48 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public Task RestoreLastScanAsync()
     {
-        if (IsScanning || _result is not null)
+        if (IsScanning || _scans.Count > 0)
         {
             return Task.CompletedTask;
         }
 
         return Task.Run(() =>
         {
-            if (!ScanCache.TryLoad(_cachePath, out var cached, _protector) || cached is null)
+            if (!ScanCache.TryLoadAll(_cachePath, out var cached, _protector) || cached.Count == 0)
             {
                 return;
             }
 
             PostToUi(() =>
             {
-                if (IsScanning || _result is not null)
+                if (IsScanning || _scans.Count > 0)
                 {
                     return;
                 }
 
-                ScanPath = cached.Root.FullPath;
-                ApplyCompletedScan(cached, persist: false, restored: true);
+                foreach (var scan in cached)
+                {
+                    UpsertScan(scan);
+                }
+
+                RefreshTree(cached[^1].Root);
+                ScanPath = cached[^1].Root.FullPath;
+                ProgressPath = "";
+                OnPropertyChanged(nameof(LastScanText));
+                OnPropertyChanged(nameof(SummaryText));
+                StatusText = cached.Count == 1
+                    ? $"Restored {cached[0].Root.Name}."
+                    : $"Restored {cached.Count} scans.";
             });
         });
     }
 
     private void ApplyCompletedScan(ScanResult result, bool persist, bool restored)
     {
-        _result = result;
+        UpsertScan(result);
         result.Root.IsExpanded = true;
-        TreeRoots.Clear();
-        TreeRoots.Add(result.Root);
-        SelectedFolder = result.Root;
+        RefreshTree(result.Root);
+        ScanPath = result.Root.FullPath;
         ProgressPath = "";
         OnPropertyChanged(nameof(LastScanText));
         OnPropertyChanged(nameof(SummaryText));
@@ -557,11 +577,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var elapsed = ScanLocation.FormatDuration(result.Duration);
         StatusText = restored
             ? $"Restored {result.Root.Name} from {when} ({elapsed}). Scan again to refresh."
-            : $"Scan complete in {elapsed} at {when}. Type in Search to filter {result.AllFiles.Count:N0} files instantly.";
+            : $"Scan complete in {elapsed} at {when}. {_scans.Count} location(s) in the tree.";
 
         if (persist)
         {
-            PersistScan(result);
+            PersistAllScans();
             try
             {
                 ScanLog.Append(result);
@@ -573,14 +593,74 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    private void PersistScan(ScanResult result)
+    private void UpsertScan(ScanResult result)
+    {
+        var next = ScanCache.Upsert(_scans, result);
+        _scans.Clear();
+        _scans.AddRange(next);
+    }
+
+    private void ReplaceScan(ScanResult previous, ScanResult updated)
+    {
+        var index = _scans.IndexOf(previous);
+        if (index >= 0)
+        {
+            _scans[index] = updated;
+        }
+    }
+
+    private void RefreshTree(FolderNode? select)
+    {
+        TreeRoots.Clear();
+        foreach (var scan in _scans)
+        {
+            scan.Root.IsExpanded = true;
+            TreeRoots.Add(scan.Root);
+        }
+
+        SelectedFolder = select;
+    }
+
+    private ScanResult? FindScan(FolderNode? node)
+    {
+        var root = node;
+        while (root?.Parent is not null)
+        {
+            root = root.Parent;
+        }
+
+        return root is null ? null : _scans.FirstOrDefault(scan => ReferenceEquals(scan.Root, root));
+    }
+
+    private bool CanRemoveSelectedScan() =>
+        !IsScanning && SelectedFolder is { Parent: null } && FindScan(SelectedFolder) is not null;
+
+    public void RemoveSelectedScan()
+    {
+        if (SelectedFolder is not { Parent: null } || FindScan(SelectedFolder) is not { } scan)
+        {
+            return;
+        }
+
+        _scans.Remove(scan);
+        RefreshTree(_scans.LastOrDefault()?.Root);
+        PersistAllScans();
+        OnPropertyChanged(nameof(SummaryText));
+        OnPropertyChanged(nameof(LastScanText));
+        StatusText = _scans.Count == 0
+            ? "Removed scan. Tree is empty."
+            : $"Removed {scan.Root.Name}. {_scans.Count} location(s) remain.";
+    }
+
+    private void PersistAllScans()
     {
         var path = _cachePath;
+        var snapshot = _scans.ToList();
         _ = Task.Run(() =>
         {
             try
             {
-                ScanCache.Save(result, path, _protector);
+                ScanCache.SaveAll(snapshot, path, _protector);
             }
             catch
             {
@@ -596,7 +676,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     private bool TryGetSafeOpenPath(out string fullPath) =>
-        LocalPathGuard.TryValidateOpenPath(SelectedEntry?.FullPath, _result, out fullPath);
+        LocalPathGuard.TryValidateOpenPath(SelectedEntry?.FullPath, _scans, out fullPath);
 
     private void ScheduleItemRefresh()
     {
@@ -604,7 +684,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _searchCts?.Dispose();
         _searchCts = null;
 
-        if (string.IsNullOrWhiteSpace(SearchText) || _result is null)
+        if (string.IsNullOrWhiteSpace(SearchText) || _scans.Count == 0)
         {
             _searchGeneration++;
             ShowFolderContents();
@@ -623,17 +703,16 @@ public sealed class MainViewModel : INotifyPropertyChanged
         try
         {
             await Task.Delay(SearchDebounce, token);
-            var snapshot = _result;
-            if (snapshot is null || generation != _searchGeneration)
+            var files = _scans.SelectMany(scan => scan.AllFiles).ToList();
+            if (files.Count == 0 || generation != _searchGeneration)
             {
                 return;
             }
 
-            var rootSize = snapshot.Root.Size;
             var rows = await Task.Run(() =>
             {
-                var matches = FileNameSearch.Filter(snapshot.AllFiles, query);
-                return matches.Select(file => ToFileRow(file, rootSize)).ToList();
+                var matches = FileNameSearch.Filter(files, query);
+                return matches.Select(file => ToFileRow(file, file.Parent?.Size ?? file.Size)).ToList();
             }, token);
 
             if (generation != _searchGeneration)
@@ -691,7 +770,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         ReplaceItems(rows);
 
-        if (_result is not null && !IsScanning && string.IsNullOrWhiteSpace(SearchText))
+        if (_scans.Count > 0 && !IsScanning && string.IsNullOrWhiteSpace(SearchText))
         {
             StatusText = $"{SelectedFolder.Folders.Count:N0} folders, {SelectedFolder.Files.Count:N0} files in {SelectedFolder.Name}";
         }

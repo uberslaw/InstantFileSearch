@@ -125,6 +125,25 @@ public static class LocalPathGuard
         return true;
     }
 
+    public static bool TryValidateOpenPath(string? path, IEnumerable<ScanResult>? scans, out string fullPath)
+    {
+        fullPath = "";
+        if (scans is null)
+        {
+            return false;
+        }
+
+        foreach (var scan in scans)
+        {
+            if (TryValidateOpenPath(path, scan, out fullPath))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// <c>\\?\C:\</c>, <c>\\.\C:\</c>, and <c>\\?\UNC\server\share</c> are the same
     /// locations as the unprefixed paths. Callers must not treat the prefix as a

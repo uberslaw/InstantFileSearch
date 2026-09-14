@@ -28,6 +28,7 @@
                 <MenuItem Header="_Cancel" Command="{Binding CancelCommand}" InputGestureText="Esc"/>
                 <Separator/>
                 <MenuItem Header="Exclude selected folder" Command="{Binding ExcludeFolderCommand}"/>
+                <MenuItem Header="Remove selected scan" Command="{Binding RemoveScanCommand}"/>
                 <MenuItem Header="Excluded folders…" Command="{Binding ShowExclusionsCommand}"/>
             </MenuItem>
         </Menu>
@@ -98,6 +99,7 @@
                     <TreeView.ContextMenu>
                         <ContextMenu>
                             <MenuItem Header="Exclude folder" Command="{Binding ExcludeFolderCommand}"/>
+                            <MenuItem Header="Remove scan" Command="{Binding RemoveScanCommand}"/>
                         </ContextMenu>
                     </TreeView.ContextMenu>
                     <TreeView.ItemTemplate>

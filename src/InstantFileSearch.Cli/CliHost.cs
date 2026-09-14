@@ -55,8 +55,10 @@ public static class CliHost
         }
 
         var exclusions = ExclusionStore.Load(exclusionsPath, protector);
+        ScanCache.TryLoadAll(cachePath, out var existing, protector);
         var result = new FileScanner().Scan(path, excludeDirectories: exclusions.Items);
-        ScanCache.Save(result, cachePath, protector);
+        var all = ScanCache.Upsert(existing, result);
+        ScanCache.SaveAll(all, cachePath, protector);
         try
         {
             ScanLog.Append(result);
@@ -69,10 +71,7 @@ public static class CliHost
         output.WriteLine(result.Root.Name);
         output.WriteLine($"{ByteFormatter.ToString(result.Root.Size)}  {result.Root.FileCount:N0} files  {result.Root.FolderCount:N0} folders  {ScanLocation.FormatDuration(result.Duration)}");
         output.WriteLine("Last scan " + result.CompletedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm"));
-        if (exclusions.Count > 0)
-        {
-            output.WriteLine($"Excluded folders: {exclusions.Count}");
-        }
+        output.WriteLine($"{all.Count} location(s) saved");
 
         return 0;
     }
@@ -91,13 +90,13 @@ public static class CliHost
             return 1;
         }
 
-        if (!ScanCache.TryLoad(cachePath, out var result, protector) || result is null)
+        if (!ScanCache.TryLoadAll(cachePath, out var scans, protector) || scans.Count == 0)
         {
             error.WriteLine("No saved scan. Run: InstantFileSearch.Cli scan <folder>");
             return 2;
         }
 
-        var matches = FileNameSearch.Filter(result.AllFiles, query).ToList();
+        var matches = FileNameSearch.Filter(scans.SelectMany(scan => scan.AllFiles), query).ToList();
         foreach (var file in matches)
         {
             output.WriteLine($"{ByteFormatter.ToString(file.Size)}\t{file.FullPath}");
@@ -114,16 +113,19 @@ public static class CliHost
         string exclusionsPath,
         IByteProtector protector)
     {
-        if (!ScanCache.TryLoad(cachePath, out var result, protector) || result is null)
+        if (!ScanCache.TryLoadAll(cachePath, out var scans, protector) || scans.Count == 0)
         {
             error.WriteLine("No saved scan.");
             return 2;
         }
 
         var exclusions = ExclusionStore.Load(exclusionsPath, protector);
-        output.WriteLine(result.Root.Name);
-        output.WriteLine($"{ByteFormatter.ToString(result.Root.Size)}  {result.Root.FileCount:N0} files  {result.Root.FolderCount:N0} folders  {ScanLocation.FormatDuration(result.Duration)}");
-        output.WriteLine("Last scan " + result.CompletedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm"));
+        output.WriteLine($"{scans.Count} location(s)");
+        foreach (var scan in scans)
+        {
+            output.WriteLine(scan.Root.Name);
+            output.WriteLine($"  {ByteFormatter.ToString(scan.Root.Size)}  {scan.Root.FileCount:N0} files  {ScanLocation.FormatDuration(scan.Duration)}  {scan.CompletedUtc.ToLocalTime():yyyy-MM-dd HH:mm}");
+        }
         output.WriteLine($"Excluded folders: {exclusions.Count}");
         foreach (var path in exclusions.Items)
         {

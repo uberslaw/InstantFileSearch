@@ -41,6 +41,45 @@ public class ScanCacheTests
     }
 
     [Fact]
+    public void SavesAndLoadsMultipleDistinctLocations()
+    {
+        var one = Path.Combine(Path.GetTempPath(), "ifs-m1-" + Guid.NewGuid().ToString("N"));
+        var two = Path.Combine(Path.GetTempPath(), "ifs-m2-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(one);
+        Directory.CreateDirectory(two);
+        File.WriteAllText(Path.Combine(one, "a.txt"), "a");
+        File.WriteAllText(Path.Combine(two, "b.txt"), "b");
+        var cache = Path.Combine(Path.GetTempPath(), "ifs-multi-" + Guid.NewGuid().ToString("N") + ".bin");
+        try
+        {
+            var first = new FileScanner().Scan(one);
+            var second = new FileScanner().Scan(two);
+            var combined = ScanCache.Upsert(ScanCache.Upsert([], first), second);
+            ScanCache.SaveAll(combined, cache, new PassThroughByteProtector());
+            Assert.True(ScanCache.TryLoadAll(cache, out var loaded, new PassThroughByteProtector()));
+            Assert.Equal(2, loaded.Count);
+            Assert.Contains(loaded, scan => scan.Root.FullPath == first.Root.FullPath);
+            Assert.Contains(loaded, scan => scan.Root.FullPath == second.Root.FullPath);
+
+            var again = new FileScanner().Scan(one);
+            var replaced = ScanCache.Upsert(loaded, again);
+            Assert.Equal(2, replaced.Count);
+            Assert.Equal(1, replaced.Count(scan =>
+                LocalPathGuard.TryGetFullPath(scan.Root.FullPath, out var path)
+                && path.Equals(first.Root.FullPath, LocalPathGuard.Comparison)));
+        }
+        finally
+        {
+            Directory.Delete(one, recursive: true);
+            Directory.Delete(two, recursive: true);
+            if (File.Exists(cache))
+            {
+                File.Delete(cache);
+            }
+        }
+    }
+
+    [Fact]
     public void TryLoadMissingOrCorruptReturnsFalse()
     {
         Assert.False(ScanCache.TryLoad(Path.Combine(Path.GetTempPath(), "ifs-nope-" + Guid.NewGuid().ToString("N") + ".json"), out _));

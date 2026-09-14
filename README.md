@@ -5,7 +5,7 @@ Windows disk explorer in the TreeSize mold: scan a folder, see the largest direc
 ## What it does
 
 - Scans a drive or folder in the background (reparse points — junctions and symlinks — skipped; access-denied paths ignored)
-- Shows a folder tree sorted by size, with percent-of-parent bars. The top row is named for the scanned path plus `this PC` or `network`, and shows how long that scan took. Each completed scan is appended to `%LocalAppData%\InstantFileSearch\logs\scans.log`.
+- Shows a folder tree sorted by size, with percent-of-parent bars. Each distinct scanned location is a top-level root (`this PC` or `network`) with that scan’s duration. Scanning the same path again replaces that root; different paths accumulate. Right-click a root → Remove scan. Each completed scan is appended to `%LocalAppData%\InstantFileSearch\logs\scans.log`.
 - Lists files and subfolders for the selected directory
 - Instant search across the scanned index (`*.log`, `report`, full path text; first 5,000 matches). Typing is debounced (200 ms) and filtered off the UI thread.
 - Restores the last successful scan from disk on launch (including when it ran); Scan again to refresh.
