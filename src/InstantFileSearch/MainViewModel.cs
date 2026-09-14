@@ -554,13 +554,22 @@ public sealed class MainViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(SummaryText));
 
         var when = FormatScanTime(result.CompletedUtc);
+        var elapsed = ScanLocation.FormatDuration(result.Duration);
         StatusText = restored
-            ? $"Restored scan of {result.Root.Name} from {when}. Scan again to refresh."
-            : $"Scan complete at {when}. Type in Search to filter {result.AllFiles.Count:N0} files instantly.";
+            ? $"Restored {result.Root.Name} from {when} ({elapsed}). Scan again to refresh."
+            : $"Scan complete in {elapsed} at {when}. Type in Search to filter {result.AllFiles.Count:N0} files instantly.";
 
         if (persist)
         {
             PersistScan(result);
+            try
+            {
+                ScanLog.Append(result);
+            }
+            catch
+            {
+                // Cache save is the source of truth; a log write must not fail the scan.
+            }
         }
     }
 

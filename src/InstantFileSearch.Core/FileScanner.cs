@@ -34,6 +34,7 @@ public sealed class FileScanner
         }
 
         var exclusions = FolderExclusionSet.From(excludeDirectories);
+        var location = ScanLocation.Classify(fullRoot);
         var clock = Stopwatch.StartNew();
         var files = new List<FileEntry>();
         var errorCount = 0;
@@ -47,10 +48,13 @@ public sealed class FileScanner
             state,
             progress,
             cancellationToken,
-            exclusions);
+            exclusions,
+            location);
 
         SortTree(root);
         clock.Stop();
+        root.ScanDuration = clock.Elapsed;
+        root.LocationKind = location;
 
         return new ScanResult
         {
@@ -70,16 +74,20 @@ public sealed class FileScanner
         ScanState state,
         IProgress<ScanProgress>? progress,
         CancellationToken cancellationToken,
-        FolderExclusionSet exclusions)
+        FolderExclusionSet exclusions,
+        ScanLocationKind rootLocation)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         var node = new FolderNode
         {
-            Name = parent is null ? directory.FullName : directory.Name,
+            Name = parent is null
+                ? ScanLocation.DisplayName(directory.FullName, rootLocation)
+                : directory.Name,
             FullPath = directory.FullName,
             Parent = parent,
             Modified = SafeTimestamp(directory),
+            LocationKind = parent is null ? rootLocation : ScanLocationKind.Unknown,
         };
 
         state.Folders++;
@@ -138,7 +146,8 @@ public sealed class FileScanner
                         state,
                         progress,
                         cancellationToken,
-                        exclusions);
+                        exclusions,
+                        rootLocation);
                     node.Folders.Add(child);
                     node.Size += child.Size;
                     node.FileCount += child.FileCount;

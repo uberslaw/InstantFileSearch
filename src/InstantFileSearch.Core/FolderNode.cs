@@ -17,6 +17,13 @@ public sealed class FolderNode : INotifyPropertyChanged
     public int FileCount { get; set; }
     public int FolderCount { get; set; }
     public DateTime Modified { get; set; }
+    public ScanLocationKind LocationKind { get; set; }
+    public TimeSpan ScanDuration { get; set; }
+
+    public string DurationText =>
+        Parent is null && ScanDuration > TimeSpan.Zero
+            ? ScanLocation.FormatDuration(ScanDuration)
+            : "";
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

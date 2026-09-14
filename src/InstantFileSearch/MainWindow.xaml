@@ -107,6 +107,7 @@
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="72"/>
+                                    <ColumnDefinition Width="56"/>
                                     <ColumnDefinition Width="70"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0"
@@ -132,6 +133,11 @@
                                     </Border>
                                 </Grid>
                                 <TextBlock Grid.Column="3"
+                                           Text="{Binding DurationText}"
+                                           Foreground="{StaticResource MutedBrush}"
+                                           TextAlignment="Right"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="4"
                                            Text="{Binding Size, Converter={StaticResource ByteSize}}"
                                            Foreground="{StaticResource MutedBrush}"
                                            TextAlignment="Right"

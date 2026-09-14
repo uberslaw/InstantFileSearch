@@ -57,8 +57,17 @@ public static class CliHost
         var exclusions = ExclusionStore.Load(exclusionsPath, protector);
         var result = new FileScanner().Scan(path, excludeDirectories: exclusions.Items);
         ScanCache.Save(result, cachePath, protector);
-        output.WriteLine(path);
-        output.WriteLine($"{ByteFormatter.ToString(result.Root.Size)}  {result.Root.FileCount:N0} files  {result.Root.FolderCount:N0} folders");
+        try
+        {
+            ScanLog.Append(result);
+        }
+        catch
+        {
+            // Keep the CLI usable if the log file cannot be written.
+        }
+
+        output.WriteLine(result.Root.Name);
+        output.WriteLine($"{ByteFormatter.ToString(result.Root.Size)}  {result.Root.FileCount:N0} files  {result.Root.FolderCount:N0} folders  {ScanLocation.FormatDuration(result.Duration)}");
         output.WriteLine("Last scan " + result.CompletedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm"));
         if (exclusions.Count > 0)
         {
@@ -112,8 +121,8 @@ public static class CliHost
         }
 
         var exclusions = ExclusionStore.Load(exclusionsPath, protector);
-        output.WriteLine(result.Root.FullPath);
-        output.WriteLine($"{ByteFormatter.ToString(result.Root.Size)}  {result.Root.FileCount:N0} files  {result.Root.FolderCount:N0} folders");
+        output.WriteLine(result.Root.Name);
+        output.WriteLine($"{ByteFormatter.ToString(result.Root.Size)}  {result.Root.FileCount:N0} files  {result.Root.FolderCount:N0} folders  {ScanLocation.FormatDuration(result.Duration)}");
         output.WriteLine("Last scan " + result.CompletedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm"));
         output.WriteLine($"Excluded folders: {exclusions.Count}");
         foreach (var path in exclusions.Items)

@@ -89,6 +89,11 @@ public static class ScanCache
 
             var files = new List<FileEntry>();
             var root = ToFolder(document.Root, parent: null, files);
+            if (root.ScanDuration <= TimeSpan.Zero && document.DurationSeconds > 0)
+            {
+                root.ScanDuration = TimeSpan.FromSeconds(document.DurationSeconds);
+            }
+
             result = new ScanResult
             {
                 Root = root,
@@ -113,6 +118,8 @@ public static class ScanCache
         FileCount = node.FileCount,
         FolderCount = node.FolderCount,
         Modified = node.Modified,
+        LocationKind = node.LocationKind.ToString(),
+        ScanDurationSeconds = node.ScanDuration.TotalSeconds,
         Folders = node.Folders.Select(FromFolder).ToList(),
         Files = node.Files.Select(FromFile).ToList(),
     };
@@ -127,15 +134,31 @@ public static class ScanCache
 
     private static FolderNode ToFolder(FolderRecord record, FolderNode? parent, List<FileEntry> allFiles)
     {
+        var kind = Enum.TryParse<ScanLocationKind>(record.LocationKind, ignoreCase: true, out var parsed)
+            ? parsed
+            : ScanLocationKind.Unknown;
+        if (parent is null && kind == ScanLocationKind.Unknown)
+        {
+            kind = ScanLocation.Classify(record.FullPath);
+        }
+
+        var name = record.Name;
+        if (parent is null && (string.IsNullOrWhiteSpace(name) || name == record.FullPath))
+        {
+            name = ScanLocation.DisplayName(record.FullPath, kind);
+        }
+
         var node = new FolderNode
         {
-            Name = record.Name,
+            Name = name,
             FullPath = record.FullPath,
             Parent = parent,
             Size = record.Size,
             FileCount = record.FileCount,
             FolderCount = record.FolderCount,
             Modified = record.Modified,
+            LocationKind = parent is null ? kind : ScanLocationKind.Unknown,
+            ScanDuration = parent is null ? TimeSpan.FromSeconds(Math.Max(0, record.ScanDurationSeconds)) : TimeSpan.Zero,
         };
 
         foreach (var child in record.Folders)
@@ -177,6 +200,8 @@ public static class ScanCache
         public int FileCount { get; set; }
         public int FolderCount { get; set; }
         public DateTime Modified { get; set; }
+        public string LocationKind { get; set; } = "";
+        public double ScanDurationSeconds { get; set; }
         public List<FolderRecord> Folders { get; set; } = [];
         public List<FileRecord> Files { get; set; } = [];
     }
