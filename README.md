@@ -36,6 +36,33 @@ Output is `dist\InstantFileSearch.exe`.
 
 Scanning `C:\` is allowed but slow and will skip folders you cannot read. Start with a project or user folder.
 
+## Launch Control
+
+This repo ships a Master Launch Control (MLC) plugin: a Standard WPF Launch Control (same chrome/theme as Switcheroo).
+
+**Discovery.** MLC **Scan folder…** looks for `*LaunchControl*.cmd`. Register `scripts\InstantFileSearch-LaunchControl.cmd` (Adapter **Generic**). Sidecar `scripts\launch-control.json` gives the MLC card a PID for `InstantFileSearch.exe` when it exists. No MLC rebuild; Instant File Search is not in MLC’s first-run seed list.
+
+**Start the LC.** Open Launch Control from the MLC card, or run `scripts\InstantFileSearch-LaunchControl.cmd`. The CMD builds `launch-control\InstantFileSearch.LaunchControl.exe` if needed, then starts it **without** `start ""` so an elevated MLC keeps its token.
+
+The LC project references `LaunchControl.Standard` from [master-launch-control](https://github.com/uberslaw/master-launch-control). Clone that repo as a sibling of this one, or at `%USERPROFILE%\Projects\master-launch-control` (the path Switcheroo/Heimdall already use).
+
+**Theme…** is wired through LaunchControl.Standard (`%LOCALAPPDATA%\InstantFileSearch\theme.json`).
+
+| Button | What it does |
+|--------|----------------|
+| Start / Restart | Last Release or Debug config (default Release). Built `InstantFileSearch.exe` if present, else `dotnet run`. |
+| Stop | Kills Instant File Search **from this repo** (bin / dist / a session this LC started). Not other apps. Closing the LC does not stop the app. |
+| Refresh status | Running/Stopped, PID, last config. |
+| Follow logs | Tails `%LOCALAPPDATA%\InstantFileSearch\logs\ops.log` (default OFF). |
+| Rebuild Release / Debug | `dotnet build` of the WPF project; output streams into the pane. |
+| Run Release / Debug | Sets last config and launches (refuses if already running). |
+| Open CLI | `wt` if present, else `cmd.exe`, at the **repo root**. Log line says where it opened. |
+| Publish | `publish.ps1` → `dist\InstantFileSearch.exe`. |
+| Run tests | `dotnet test` on `tests\InstantFileSearch.Tests` (not the `.slnx`). |
+| Open solution / project / dist / logs | Explorer (or the default app for `.slnx`). |
+
+There is no Windows service and no Python/venv UI.
+
 ## Assumptions
 
 - Runtime: Windows x64, .NET 8 Desktop (or the self-contained publish)

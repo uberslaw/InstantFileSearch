@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "productId": "instantfilesearch",
+  "productName": "Instant File Search",
+  "themePath": "%LOCALAPPDATA%\\InstantFileSearch\\theme.json",
+  "appDataFolder": "InstantFileSearch"
+}
