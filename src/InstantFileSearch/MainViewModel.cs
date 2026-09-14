@@ -96,7 +96,25 @@ public sealed class MainViewModel : INotifyPropertyChanged
         get => _selectedFolder;
         set
         {
-            if (SetField(ref _selectedFolder, value) && string.IsNullOrWhiteSpace(SearchText))
+            if (ReferenceEquals(_selectedFolder, value))
+            {
+                return;
+            }
+
+            if (_selectedFolder is not null)
+            {
+                _selectedFolder.IsSelected = false;
+            }
+
+            _selectedFolder = value;
+            if (_selectedFolder is not null)
+            {
+                _selectedFolder.ExpandAncestors();
+                _selectedFolder.IsSelected = true;
+            }
+
+            OnPropertyChanged();
+            if (string.IsNullOrWhiteSpace(SearchText))
             {
                 RefreshItems();
             }
@@ -133,11 +151,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         get
         {
+            if (IsScanning)
+            {
+                return $"{ByteFormatter.ToString(_bytesScanned)}  ·  {FilesScanned:N0} files  ·  {FoldersScanned:N0} folders";
+            }
+
             if (_result is null)
             {
-                return IsScanning
-                    ? $"{ByteFormatter.ToString(_bytesScanned)}  ·  {FilesScanned:N0} files  ·  {FoldersScanned:N0} folders"
-                    : "No scan yet";
+                return "No scan yet";
             }
 
             var errors = _result.ErrorCount == 0 ? "" : $"  ·  {_result.ErrorCount:N0} skipped";
@@ -154,23 +175,30 @@ public sealed class MainViewModel : INotifyPropertyChanged
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(ScanPath))
+        if (!LocalPathGuard.TryResolveExistingDirectory(ScanPath, out var path))
         {
-            Browse();
             if (string.IsNullOrWhiteSpace(ScanPath))
             {
+                Browse();
+            }
+
+            if (!LocalPathGuard.TryResolveExistingDirectory(ScanPath, out path))
+            {
+                if (!string.IsNullOrWhiteSpace(ScanPath))
+                {
+                    StatusText = "Choose an existing folder to scan.";
+                }
+
                 return;
             }
         }
+
+        ScanPath = path;
 
         _scanCts?.Dispose();
         _scanCts = new CancellationTokenSource();
         IsScanning = true;
         OnPropertyChanged(nameof(IsIdle));
-        TreeRoots.Clear();
-        Items.Clear();
-        _result = null;
-        SelectedFolder = null;
         FilesScanned = 0;
         FoldersScanned = 0;
         _bytesScanned = 0;
@@ -189,14 +217,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         try
         {
-            var path = ScanPath;
             var result = await Task.Run(() => _scanner.Scan(path, progress, _scanCts.Token), _scanCts.Token);
-            _result = result;
-            TreeRoots.Add(result.Root);
-            SelectedFolder = result.Root;
-            ProgressPath = "";
-            StatusText = $"Scan complete. Type in Search to filter {result.AllFiles.Count:N0} files instantly.";
-            RefreshItems();
+            ApplyCompletedScan(result);
         }
         catch (OperationCanceledException)
         {
@@ -231,7 +253,17 @@ public sealed class MainViewModel : INotifyPropertyChanged
             return;
         }
 
-        TryStart(SelectedEntry.FullPath);
+        if (!TryGetSafeOpenPath(out var path))
+        {
+            MessageBox.Show(
+                "That path is not part of the current scan or no longer exists.",
+                "Instant File Search",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        TryStart(path);
     }
 
     public void ShowInExplorer()
@@ -241,14 +273,31 @@ public sealed class MainViewModel : INotifyPropertyChanged
             return;
         }
 
-        Process.Start(new ProcessStartInfo
+        if (!TryGetSafeOpenPath(out var path))
         {
-            FileName = "explorer.exe",
-            Arguments = SelectedEntry.IsFolder
-                ? $"\"{SelectedEntry.FullPath}\""
-                : $"/select,\"{SelectedEntry.FullPath}\"",
-            UseShellExecute = true,
-        });
+            MessageBox.Show(
+                "That path is not part of the current scan or no longer exists.",
+                "Instant File Search",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = SelectedEntry.IsFolder
+                    ? $"\"{path}\""
+                    : $"/select,\"{path}\"",
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Instant File Search", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     public void CopyPath()
@@ -266,16 +315,32 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             Title = "Choose a folder to scan",
         };
-        if (!string.IsNullOrWhiteSpace(ScanPath) && System.IO.Directory.Exists(ScanPath))
+        if (LocalPathGuard.TryResolveExistingDirectory(ScanPath, out var initial))
         {
-            dialog.InitialDirectory = ScanPath;
+            dialog.InitialDirectory = initial;
         }
 
-        if (dialog.ShowDialog() == true)
+        if (dialog.ShowDialog() == true &&
+            LocalPathGuard.TryResolveExistingDirectory(dialog.FolderName, out var folder))
         {
-            ScanPath = dialog.FolderName;
+            ScanPath = folder;
         }
     }
+
+    private void ApplyCompletedScan(ScanResult result)
+    {
+        _result = result;
+        result.Root.IsExpanded = true;
+        TreeRoots.Clear();
+        TreeRoots.Add(result.Root);
+        SelectedFolder = result.Root;
+        ProgressPath = "";
+        StatusText = $"Scan complete. Type in Search to filter {result.AllFiles.Count:N0} files instantly.";
+        RefreshItems();
+    }
+
+    private bool TryGetSafeOpenPath(out string fullPath) =>
+        LocalPathGuard.TryValidateOpenPath(SelectedEntry?.FullPath, _result, out fullPath);
 
     private void RefreshItems()
     {

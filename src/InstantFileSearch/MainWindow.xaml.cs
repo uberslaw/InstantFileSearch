@@ -38,18 +38,23 @@ public partial class MainWindow : Window
             return;
         }
 
-        var path = paths[0];
-        if (System.IO.File.Exists(path))
-        {
-            path = System.IO.Path.GetDirectoryName(path) ?? path;
-        }
-
-        if (!System.IO.Directory.Exists(path))
+        if (!LocalPathGuard.TryGetFullPath(paths[0], out var dropped))
         {
             return;
         }
 
-        Vm.ScanPath = path;
+        var path = dropped;
+        if (File.Exists(path))
+        {
+            path = Path.GetDirectoryName(path) ?? path;
+        }
+
+        if (!LocalPathGuard.TryResolveExistingDirectory(path, out var directory))
+        {
+            return;
+        }
+
+        Vm.ScanPath = directory;
         await Vm.ScanAsync();
     }
 

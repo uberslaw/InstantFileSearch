@@ -22,7 +22,11 @@ public sealed class FileScanner
             throw new ArgumentException("A folder path is required.", nameof(rootPath));
         }
 
-        var fullRoot = Path.GetFullPath(rootPath);
+        if (!LocalPathGuard.TryGetFullPath(rootPath, out var fullRoot))
+        {
+            throw new ArgumentException("The folder path is invalid.", nameof(rootPath));
+        }
+
         if (!Directory.Exists(fullRoot))
         {
             throw new DirectoryNotFoundException($"Folder not found: {fullRoot}");

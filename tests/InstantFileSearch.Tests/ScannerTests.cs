@@ -71,4 +71,19 @@ public class FileScannerTests
         Assert.Throws<DirectoryNotFoundException>(() =>
             new FileScanner().Scan(Path.Combine(Path.GetTempPath(), "does-not-exist-" + Guid.NewGuid().ToString("N"))));
     }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ScanEmptyPathThrows(string? path)
+    {
+        Assert.Throws<ArgumentException>(() => new FileScanner().Scan(path!));
+    }
+
+    [Fact]
+    public void ScanInvalidPathThrows()
+    {
+        Assert.Throws<ArgumentException>(() => new FileScanner().Scan("\0"));
+    }
 }
