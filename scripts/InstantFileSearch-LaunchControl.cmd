@@ -18,12 +18,11 @@ if not exist "%EXE%" (
     exit /b 1
   )
   rem LaunchControl.Standard lives in the master-launch-control repo.
-  rem Sibling folder, %%USERPROFILE%%\Projects\master-launch-control, or the
-  rem machine path in InstantFileSearch.LaunchControl.csproj all work.
+  rem Resolve order: MLC_ROOT / LcStandard, sibling folder, %%USERPROFILE%%\Projects\master-launch-control.
   dotnet build "%~dp0..\launch-control\InstantFileSearch.LaunchControl.csproj" -c Release
   if errorlevel 1 (
     echo Build failed. Clone https://github.com/uberslaw/master-launch-control next to this repo
-    echo or at %%USERPROFILE%%\Projects\master-launch-control so LaunchControl.Standard can be referenced.
+    echo or at %%USERPROFILE%%\Projects\master-launch-control, or set MLC_ROOT to that clone.
     pause
     exit /b 1
   )

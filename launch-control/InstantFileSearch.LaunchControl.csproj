@@ -5,16 +5,40 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <RootNamespace>InstantFileSearch.LaunchControl</RootNamespace>
     <AssemblyName>InstantFileSearch.LaunchControl</AssemblyName>
     <Product>Instant File Search Launch Control</Product>
     <Version>1.0.0</Version>
+    <LcStandard Condition="'$(LcStandard)' == '' and '$(MLC_ROOT)' != '' and Exists('$(MLC_ROOT)\src\LaunchControl.Standard\LaunchControl.Standard.csproj')">$(MLC_ROOT)\src\LaunchControl.Standard\LaunchControl.Standard.csproj</LcStandard>
     <LcStandard Condition="'$(LcStandard)' == '' and Exists('$(MSBuildThisFileDirectory)..\..\master-launch-control\src\LaunchControl.Standard\LaunchControl.Standard.csproj')">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\master-launch-control\src\LaunchControl.Standard\LaunchControl.Standard.csproj'))</LcStandard>
     <LcStandard Condition="'$(LcStandard)' == '' and Exists('$(USERPROFILE)\Projects\master-launch-control\src\LaunchControl.Standard\LaunchControl.Standard.csproj')">$(USERPROFILE)\Projects\master-launch-control\src\LaunchControl.Standard\LaunchControl.Standard.csproj</LcStandard>
-    <LcStandard Condition="'$(LcStandard)' == ''">C:\Users\christopher.owen\Projects\master-launch-control\src\LaunchControl.Standard\LaunchControl.Standard.csproj</LcStandard>
+    <LcStandard Condition="'$(LcStandard)' == '' and Exists('C:\Users\christopher.owen\Projects\master-launch-control\src\LaunchControl.Standard\LaunchControl.Standard.csproj')">C:\Users\christopher.owen\Projects\master-launch-control\src\LaunchControl.Standard\LaunchControl.Standard.csproj</LcStandard>
   </PropertyGroup>
+  <Target Name="RequireLcStandard" BeforeTargets="ResolveProjectReferences">
+    <Error Condition="'$(LcStandard)' == '' or !Exists('$(LcStandard)')"
+           Text="LaunchControl.Standard not found. Clone https://github.com/uberslaw/master-launch-control as a sibling of this repo, at %USERPROFILE%\Projects\master-launch-control, or set MLC_ROOT / LcStandard to that clone." />
+  </Target>
+  <Target Name="WriteLcCompat" AfterTargets="Build">
+    <PropertyGroup>
+      <_IfsLocalAppData Condition="'$(LOCALAPPDATA)' != ''">$(LOCALAPPDATA)</_IfsLocalAppData>
+      <_IfsLocalAppData Condition="'$(_IfsLocalAppData)' == ''">$(HOME)</_IfsLocalAppData>
+      <_IfsThemePath>$([System.IO.Path]::Combine('$(_IfsLocalAppData)', 'InstantFileSearch', 'theme.json'))</_IfsThemePath>
+      <_IfsThemeJson>$([System.String]::Copy('$(_IfsThemePath)').Replace('\', '\\'))</_IfsThemeJson>
+    </PropertyGroup>
+    <ItemGroup>
+      <_LcCompatLine Include="{" />
+      <_LcCompatLine Include="  &quot;schemaVersion&quot;: 1," />
+      <_LcCompatLine Include="  &quot;productId&quot;: &quot;instantfilesearch&quot;," />
+      <_LcCompatLine Include="  &quot;productName&quot;: &quot;Instant File Search&quot;," />
+      <_LcCompatLine Include="  &quot;themePath&quot;: &quot;$(_IfsThemeJson)&quot;," />
+      <_LcCompatLine Include="  &quot;appDataFolder&quot;: &quot;InstantFileSearch&quot;" />
+      <_LcCompatLine Include="}" />
+    </ItemGroup>
+    <MakeDir Directories="$(OutputPath)" />
+    <WriteLinesToFile File="$(OutputPath)lc-compat.json" Overwrite="true" Encoding="UTF-8" Lines="@(_LcCompatLine)" />
+  </Target>
   <ItemGroup>
-    <ProjectReference Include="$(LcStandard)" />
-    <None Include="lc-compat.json" CopyToOutputDirectory="PreserveNewest" />
+    <ProjectReference Include="$(LcStandard)" Condition="'$(LcStandard)' != '' and Exists('$(LcStandard)')" />
   </ItemGroup>
 </Project>

@@ -46,9 +46,9 @@ This repo ships a Master Launch Control (MLC) plugin: a Standard WPF Launch Cont
 
 **Start the LC.** Open Launch Control from the MLC card, or run `scripts\InstantFileSearch-LaunchControl.cmd`. The CMD builds `launch-control\InstantFileSearch.LaunchControl.exe` if needed, then starts it **without** `start ""` so an elevated MLC keeps its token.
 
-The LC project references `LaunchControl.Standard` from [master-launch-control](https://github.com/uberslaw/master-launch-control). Clone that repo as a sibling of this one, or at `%USERPROFILE%\Projects\master-launch-control` (the path Switcheroo/Heimdall already use).
+The LC project references `LaunchControl.Standard` from [master-launch-control](https://github.com/uberslaw/master-launch-control). Clone that repo as a sibling of this one, at `%USERPROFILE%\Projects\master-launch-control`, or set `MLC_ROOT` / `LcStandard` to that clone. Linux/SDK builds of the LC project need `EnableWindowsTargeting` (already set in the csproj).
 
-**Theme…** is wired through LaunchControl.Standard (`%LOCALAPPDATA%\InstantFileSearch\theme.json`).
+**Theme…** is LaunchControl.Standard. MLC discovers `lc-compat.json` next to the CMD first, then `launch-control\bin\{Release,Debug}\net8.0-windows\lc-compat.json`. This repo does **not** ship `scripts\lc-compat.json` (an unexpanded `%LOCALAPPDATA%` path would be used as a literal folder). Building the LC writes `themePath` expanded for the current user; running the LC also writes `%LOCALAPPDATA%\InstantFileSearch\theme.json` via `LcCompat.Write`.
 
 | Button | What it does |
 |--------|----------------|
