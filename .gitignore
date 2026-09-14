@@ -15,6 +15,9 @@ obj/
 node_modules/
 dist/
 build/
+TestResults/
+*.user
+.vs/
 __pycache__/
 *.pyc
 .env
