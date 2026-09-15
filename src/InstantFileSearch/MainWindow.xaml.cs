@@ -109,6 +109,23 @@ public partial class MainWindow : Window
         {
             Vm.OpenSelected();
             e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.C
+            && Keyboard.Modifiers == ModifierKeys.Control
+            && Keyboard.FocusedElement is not TextBox)
+        {
+            if (FolderTree.IsKeyboardFocusWithin)
+            {
+                Vm.CopyPath(ResultsUi.TreeContext);
+                e.Handled = true;
+            }
+            else if (EntryGrid.IsKeyboardFocusWithin)
+            {
+                Vm.CopyPath(null);
+                e.Handled = true;
+            }
         }
     }
 
