@@ -30,6 +30,10 @@ public sealed class FolderNode : INotifyPropertyChanged
     public double PercentOfParent =>
         Parent is null || Parent.Size <= 0 ? 100 : Size * 100.0 / Parent.Size;
 
+    public string PercentText => ResultsUi.FormatPercent(PercentOfParent, isRoot: Parent is null);
+
+    public string Glyph => ResultsUi.FolderGlyph(isRoot: Parent is null, LocationKind);
+
     public bool IsExpanded
     {
         get => _isExpanded;
