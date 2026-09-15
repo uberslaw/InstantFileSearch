@@ -51,30 +51,83 @@
         </StatusBar>
 
         <Border DockPanel.Dock="Top" Background="#16181C" Padding="14,12" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
-            <DockPanel LastChildFill="True">
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="Search" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="{StaticResource MutedBrush}"/>
-                    <TextBox x:Name="SearchBox"
-                             Width="280"
-                             Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="Filter scanned files. Wildcards * and ? work."/>
-                </StackPanel>
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBox Grid.Column="0"
-                             Margin="0,0,10,0"
-                             Text="{Binding ScanPath, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="Folder to scan"/>
-                    <Button Grid.Column="1" Content="Browse" Style="{StaticResource ToolbarButton}" Command="{Binding BrowseCommand}"/>
-                    <Button Grid.Column="2" Content="Scan" Style="{StaticResource AccentButton}" Command="{Binding ScanCommand}"/>
-                    <Button Grid.Column="3" Content="Cancel" Style="{StaticResource CancelButton}" Command="{Binding CancelCommand}" Margin="0"/>
-                </Grid>
-            </DockPanel>
+            <StackPanel>
+                <DockPanel LastChildFill="True">
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="Search" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="{StaticResource MutedBrush}"/>
+                        <TextBox x:Name="SearchBox"
+                                 Width="220"
+                                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="Filter scanned files. Wildcards * and ? work. Empty text is allowed with Advanced filters."/>
+                        <ToggleButton Content="Advanced"
+                                      Margin="8,0,0,0"
+                                      IsChecked="{Binding IsAdvancedOpen}"
+                                      Style="{StaticResource ToolbarToggle}"
+                                      ToolTip="Size, date, folder scope, and name vs path. Not saved."/>
+                    </StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0"
+                                 Margin="0,0,10,0"
+                                 Text="{Binding ScanPath, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="Folder to scan"/>
+                        <Button Grid.Column="1" Content="Browse" Style="{StaticResource ToolbarButton}" Command="{Binding BrowseCommand}"/>
+                        <Button Grid.Column="2" Content="Scan" Style="{StaticResource AccentButton}" Command="{Binding ScanCommand}"/>
+                        <Button Grid.Column="3" Content="Cancel" Style="{StaticResource CancelButton}" Command="{Binding CancelCommand}" Margin="0"/>
+                    </Grid>
+                </DockPanel>
+                <WrapPanel Margin="0,10,0,0" Visibility="{Binding IsAdvancedOpen, Converter={StaticResource BoolToVis}}">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,16,4">
+                        <TextBlock Text="Size" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="{StaticResource MutedBrush}"/>
+                        <TextBlock Text="From" VerticalAlignment="Center" Margin="0,0,6,0" Foreground="{StaticResource MutedBrush}"/>
+                        <TextBox Width="72"
+                                 Text="{Binding SizeFromText, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="Minimum size. Empty means no minimum. Units are 1024-based (1 KB = 1024 bytes)."/>
+                        <ComboBox Width="64"
+                                  Margin="4,0,0,0"
+                                  ItemsSource="{Binding SizeUnitOptions}"
+                                  SelectedItem="{Binding SizeFromUnit}"/>
+                        <TextBlock Text="To" VerticalAlignment="Center" Margin="12,0,6,0" Foreground="{StaticResource MutedBrush}"/>
+                        <TextBox Width="72"
+                                 Text="{Binding SizeToText, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="Maximum size. Empty means no maximum."/>
+                        <ComboBox Width="64"
+                                  Margin="4,0,0,0"
+                                  ItemsSource="{Binding SizeUnitOptions}"
+                                  SelectedItem="{Binding SizeToUnit}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,16,4">
+                        <TextBlock Text="Modified" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="{StaticResource MutedBrush}"/>
+                        <TextBlock Text="From" VerticalAlignment="Center" Margin="0,0,6,0" Foreground="{StaticResource MutedBrush}"/>
+                        <TextBox Width="110"
+                                 Text="{Binding ModifiedFromText, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="Earliest last-write date (yyyy-MM-dd). Empty means no minimum."/>
+                        <TextBlock Text="To" VerticalAlignment="Center" Margin="12,0,6,0" Foreground="{StaticResource MutedBrush}"/>
+                        <TextBox Width="110"
+                                 Text="{Binding ModifiedToText, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="Latest last-write date (yyyy-MM-dd). Empty means no maximum."/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,16,4">
+                        <TextBlock Text="Scope" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="{StaticResource MutedBrush}"/>
+                        <ComboBox Width="140"
+                                  ItemsSource="{Binding ScopeOptions}"
+                                  SelectedItem="{Binding SearchScope}"
+                                  ToolTip="All scans searches every loaded location. Selected folder limits to the tree node."/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,0,4">
+                        <TextBlock Text="Match" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="{StaticResource MutedBrush}"/>
+                        <ComboBox Width="140"
+                                  ItemsSource="{Binding MatchModeOptions}"
+                                  SelectedItem="{Binding MatchMode}"
+                                  ToolTip="Name or path is the default. Name ignores folder path noise."/>
+                    </StackPanel>
+                </WrapPanel>
+            </StackPanel>
         </Border>
 
         <Grid>

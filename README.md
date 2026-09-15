@@ -7,7 +7,7 @@ Windows disk explorer in the TreeSize mold: scan a folder, see the largest direc
 - Scans a drive or folder in the background (reparse points — junctions and symlinks — skipped; access-denied paths ignored)
 - Shows a folder tree sorted by size, with percent-of-parent bars. Each distinct scanned location is a top-level root (`this PC` or `network`) with that scan’s duration. Scanning the same path again replaces that root; different paths accumulate. Right-click a root → Remove scan. Each completed scan is appended to `%LocalAppData%\InstantFileSearch\logs\scans.log`.
 - Lists files and subfolders for the selected directory
-- Instant search across the scanned index (`*.log`, `report`, full path text; first 5,000 matches). Typing is debounced (200 ms) and filtered off the UI thread.
+- Instant search across the scanned index (`*.log`, `report`, full path text; first 5,000 matches). Typing is debounced (200 ms) and filtered off the UI thread. **Advanced** (collapsed by default) adds size from/to (B–TB, 1024-based), modified from/to (`yyyy-MM-dd`), scope (all scans or the selected folder), and match (name, path, or both). Empty bounds mean no limit; size-only search is allowed. Filters apply to the in-memory index and are not saved.
 - Restores the last successful scan from disk on launch (including when it ran); Scan again to refresh.
 - Right-click a folder to exclude it from this view and future scans (`Scan` → Excluded folders… to undo)
 - CLI for scan / search / status / exclude (same encrypted cache as the GUI)
@@ -38,7 +38,7 @@ Output is `dist\InstantFileSearch.exe` and `dist\InstantFileSearch.Cli.exe`.
 1. Browse or drop a folder
 2. Scan
 3. Click folders on the left (largest at the top)
-4. Type in Search to filter files (`Ctrl+F`)
+4. Type in Search to filter files (`Ctrl+F`). Open **Advanced** for size, date, folder scope, and name vs path.
 5. Close and reopen: the last scan and its time come back from `%LocalAppData%\InstantFileSearch`
 6. Right-click a folder → Exclude folder to skip it next time
 

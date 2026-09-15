@@ -25,6 +25,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private readonly List<ScanResult> _scans = [];
     private string _scanPath = "";
     private string _searchText = "";
+    private string _sizeFromText = "";
+    private string _sizeToText = "";
+    private string _sizeFromUnit = "MB";
+    private string _sizeToUnit = "MB";
+    private string _modifiedFromText = "";
+    private string _modifiedToText = "";
+    private string _searchScope = "All scans";
+    private string _matchMode = "Name or path";
+    private bool _isAdvancedOpen;
     private string _statusText = "Choose a folder and scan. Drop a folder on the window to start.";
     private bool _isScanning;
     private FolderNode? _selectedFolder;
@@ -108,6 +117,114 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    public bool IsAdvancedOpen
+    {
+        get => _isAdvancedOpen;
+        set => SetField(ref _isAdvancedOpen, value);
+    }
+
+    public IReadOnlyList<string> SizeUnitOptions { get; } = ["B", "KB", "MB", "GB", "TB"];
+
+    public IReadOnlyList<string> ScopeOptions { get; } = ["All scans", "Selected folder"];
+
+    public IReadOnlyList<string> MatchModeOptions { get; } = ["Name or path", "Name", "Path"];
+
+    public string SizeFromText
+    {
+        get => _sizeFromText;
+        set
+        {
+            if (SetField(ref _sizeFromText, value))
+            {
+                ScheduleItemRefresh();
+            }
+        }
+    }
+
+    public string SizeToText
+    {
+        get => _sizeToText;
+        set
+        {
+            if (SetField(ref _sizeToText, value))
+            {
+                ScheduleItemRefresh();
+            }
+        }
+    }
+
+    public string SizeFromUnit
+    {
+        get => _sizeFromUnit;
+        set
+        {
+            if (SetField(ref _sizeFromUnit, string.IsNullOrWhiteSpace(value) ? "MB" : value))
+            {
+                ScheduleItemRefresh();
+            }
+        }
+    }
+
+    public string SizeToUnit
+    {
+        get => _sizeToUnit;
+        set
+        {
+            if (SetField(ref _sizeToUnit, string.IsNullOrWhiteSpace(value) ? "MB" : value))
+            {
+                ScheduleItemRefresh();
+            }
+        }
+    }
+
+    public string ModifiedFromText
+    {
+        get => _modifiedFromText;
+        set
+        {
+            if (SetField(ref _modifiedFromText, value))
+            {
+                ScheduleItemRefresh();
+            }
+        }
+    }
+
+    public string ModifiedToText
+    {
+        get => _modifiedToText;
+        set
+        {
+            if (SetField(ref _modifiedToText, value))
+            {
+                ScheduleItemRefresh();
+            }
+        }
+    }
+
+    public string SearchScope
+    {
+        get => _searchScope;
+        set
+        {
+            if (SetField(ref _searchScope, string.IsNullOrWhiteSpace(value) ? "All scans" : value))
+            {
+                ScheduleItemRefresh();
+            }
+        }
+    }
+
+    public string MatchMode
+    {
+        get => _matchMode;
+        set
+        {
+            if (SetField(ref _matchMode, string.IsNullOrWhiteSpace(value) ? "Name or path" : value))
+            {
+                ScheduleItemRefresh();
+            }
+        }
+    }
+
     public string StatusText
     {
         get => _statusText;
@@ -163,10 +280,17 @@ public sealed class MainViewModel : INotifyPropertyChanged
             OnPropertyChanged();
             ((RelayCommand)ExcludeFolderCommand).RaiseCanExecuteChanged();
             ((RelayCommand)RemoveScanCommand).RaiseCanExecuteChanged();
-            if (string.IsNullOrWhiteSpace(SearchText))
+            if (IsSearchActive)
             {
-                ShowFolderContents();
+                if (IsSelectedFolderScope)
+                {
+                    ScheduleItemRefresh();
+                }
+
+                return;
             }
+
+            ShowFolderContents();
         }
     }
 
@@ -340,7 +464,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             return;
         }
 
-        if (SelectedEntry.IsFolder && SelectedEntry.Folder is not null && string.IsNullOrWhiteSpace(SearchText))
+        if (SelectedEntry.IsFolder && SelectedEntry.Folder is not null && !IsSearchActive)
         {
             SelectedFolder = SelectedEntry.Folder;
             return;
@@ -678,13 +802,35 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool TryGetSafeOpenPath(out string fullPath) =>
         LocalPathGuard.TryValidateOpenPath(SelectedEntry?.FullPath, _scans, out fullPath);
 
+    private bool IsSearchActive => BuildSearchQuery().HasCriteria;
+
+    private bool IsSelectedFolderScope =>
+        string.Equals(SearchScope, "Selected folder", StringComparison.Ordinal);
+
+    private SearchQuery BuildSearchQuery() => new()
+    {
+        Text = SearchText,
+        MinSizeBytes = ByteFormatter.ParseOptionalBytes(SizeFromText, ByteFormatter.ParseUnit(SizeFromUnit)),
+        MaxSizeBytes = ByteFormatter.ParseOptionalBytes(SizeToText, ByteFormatter.ParseUnit(SizeToUnit)),
+        ModifiedFrom = SearchQuery.ParseDate(ModifiedFromText),
+        ModifiedTo = SearchQuery.ParseDate(ModifiedToText),
+        UnderFolder = IsSelectedFolderScope ? SelectedFolder?.FullPath ?? "" : null,
+        Match = MatchMode switch
+        {
+            "Name" => SearchMatchMode.Name,
+            "Path" => SearchMatchMode.Path,
+            _ => SearchMatchMode.NameOrPath,
+        },
+    };
+
     private void ScheduleItemRefresh()
     {
         _searchCts?.Cancel();
         _searchCts?.Dispose();
         _searchCts = null;
 
-        if (string.IsNullOrWhiteSpace(SearchText) || _scans.Count == 0)
+        var query = BuildSearchQuery();
+        if (!query.HasCriteria || _scans.Count == 0)
         {
             _searchGeneration++;
             ShowFolderContents();
@@ -692,13 +838,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
 
         var generation = ++_searchGeneration;
-        var query = SearchText;
         var cts = new CancellationTokenSource();
         _searchCts = cts;
         _ = SearchAsync(generation, query, cts.Token);
     }
 
-    private async Task SearchAsync(int generation, string query, CancellationToken token)
+    private async Task SearchAsync(int generation, SearchQuery query, CancellationToken token)
     {
         try
         {
@@ -728,14 +873,20 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 }
 
                 ReplaceItems(rows);
-                StatusText = rows.Count == FileNameSearch.DefaultLimit
-                    ? $"Showing first {FileNameSearch.DefaultLimit:N0} matches for \"{query.Trim()}\""
-                    : $"{rows.Count:N0} files match \"{query.Trim()}\"";
+                StatusText = FormatSearchStatus(query, rows.Count);
             });
         }
         catch (OperationCanceledException)
         {
         }
+    }
+
+    private static string FormatSearchStatus(SearchQuery query, int count)
+    {
+        var label = string.IsNullOrWhiteSpace(query.Text) ? "filters" : $"\"{query.Text.Trim()}\"";
+        return count == FileNameSearch.DefaultLimit
+            ? $"Showing first {FileNameSearch.DefaultLimit:N0} matches for {label}"
+            : $"{count:N0} files match {label}";
     }
 
     private void ShowFolderContents()
@@ -770,7 +921,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         ReplaceItems(rows);
 
-        if (_scans.Count > 0 && !IsScanning && string.IsNullOrWhiteSpace(SearchText))
+        if (_scans.Count > 0 && !IsScanning && !IsSearchActive)
         {
             StatusText = $"{SelectedFolder.Folders.Count:N0} folders, {SelectedFolder.Files.Count:N0} files in {SelectedFolder.Name}";
         }
