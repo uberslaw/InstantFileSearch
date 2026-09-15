@@ -15,7 +15,6 @@
             <Button Content="Close" Style="{StaticResource ToolbarButton}" Click="Close_Click" Margin="0"/>
         </StackPanel>
         <ListBox ItemsSource="{Binding ExclusionPaths}"
-                 SelectedItem="{Binding SelectedExclusion}"
-                 DisplayMemberPath="."/>
+                 SelectedItem="{Binding SelectedExclusion}"/>
     </DockPanel>
 </Window>

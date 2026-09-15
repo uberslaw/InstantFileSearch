@@ -12,12 +12,7 @@ public sealed class PercentToWidthConverter : IMultiValueConverter
             return 0d;
         }
 
-        if (double.IsNaN(maxWidth) || maxWidth <= 0)
-        {
-            return 0d;
-        }
-
-        return Math.Max(0, Math.Min(maxWidth, maxWidth * Math.Clamp(percent, 0, 100) / 100.0));
+        return UiLayout.PercentToWidth(percent, maxWidth);
     }
 
     public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) =>

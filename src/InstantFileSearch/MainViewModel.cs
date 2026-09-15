@@ -53,9 +53,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ScanCommand = new RelayCommand(async () => await ScanAsync(), () => !IsScanning);
         CancelCommand = new RelayCommand(Cancel, () => IsScanning);
         OpenCommand = new RelayCommand(OpenSelected, () => SelectedEntry is not null);
-        ShowInExplorerCommand = new RelayCommand(ShowInExplorer, () => SelectedEntry is not null);
-        CopyPathCommand = new RelayCommand(CopyPath, () => SelectedEntry is not null);
-        ExcludeFolderCommand = new RelayCommand(ExcludeSelectedFolder, CanExcludeSelectedFolder);
+        ShowInExplorerCommand = new RelayCommand(ShowInExplorer, _ => CanRevealSelection());
+        CopyPathCommand = new RelayCommand(CopyPath, _ => CanCopySelection());
+        CopyNameCommand = new RelayCommand(CopyName, _ => CanCopySelection());
+        ExcludeFolderCommand = new RelayCommand(ExcludeSelectedFolder, _ => CanExcludeSelectedFolder());
         RemoveScanCommand = new RelayCommand(RemoveSelectedScan, CanRemoveSelectedScan);
         RemoveExclusionCommand = new RelayCommand(RemoveSelectedExclusion, () => SelectedExclusion is not null);
         ShowExclusionsCommand = new RelayCommand(ShowExclusions);
@@ -80,6 +81,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public ICommand OpenCommand { get; }
     public ICommand ShowInExplorerCommand { get; }
     public ICommand CopyPathCommand { get; }
+    public ICommand CopyNameCommand { get; }
     public ICommand ExcludeFolderCommand { get; }
     public ICommand RemoveScanCommand { get; }
     public ICommand RemoveExclusionCommand { get; }
@@ -278,8 +280,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
             }
 
             OnPropertyChanged();
-            ((RelayCommand)ExcludeFolderCommand).RaiseCanExecuteChanged();
+            RaiseSelectionCommands();
             ((RelayCommand)RemoveScanCommand).RaiseCanExecuteChanged();
+            NotifyPresentation();
             if (IsSearchActive)
             {
                 if (IsSelectedFolderScope)
@@ -301,10 +304,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             if (SetField(ref _selectedEntry, value))
             {
-                ((RelayCommand)OpenCommand).RaiseCanExecuteChanged();
-                ((RelayCommand)ShowInExplorerCommand).RaiseCanExecuteChanged();
-                ((RelayCommand)CopyPathCommand).RaiseCanExecuteChanged();
-                ((RelayCommand)ExcludeFolderCommand).RaiseCanExecuteChanged();
+                RaiseSelectionCommands();
+                NotifyPresentation();
             }
         }
     }
@@ -338,9 +339,43 @@ public sealed class MainViewModel : INotifyPropertyChanged
             var totalSize = _scans.Sum(scan => scan.Root.Size);
             var totalFiles = _scans.Sum(scan => scan.Root.FileCount);
             var places = _scans.Count == 1 ? "1 location" : $"{_scans.Count} locations";
+            if (IsSearchActive)
+            {
+                var matches = Items.Count == 1 ? "1 match" : $"{Items.Count:N0} matches";
+                return $"{places}  ·  {ByteFormatter.ToString(totalSize)}  ·  {matches}";
+            }
+
             return $"{places}  ·  {ByteFormatter.ToString(totalSize)}  ·  {totalFiles:N0} files";
         }
     }
+
+    public string EmptyStateText => ResultsUi.EmptyState(_scans.Count > 0, IsSearchActive, Items.Count);
+
+    public bool IsEmptyStateVisible => ResultsUi.ShowEmptyState(Items.Count);
+
+    public string ContentsHeaderText => ResultsUi.ContentsHeader(_scans.Count > 0, IsSearchActive, Items.Count);
+
+    public string SelectedDetailsPath => SelectedEntry?.FullPath ?? SelectedFolder?.FullPath ?? "";
+
+    public string SelectedDetailsMeta
+    {
+        get
+        {
+            if (SelectedEntry is not null)
+            {
+                return ResultsUi.DetailsMeta(SelectedEntry.Size, SelectedEntry.Modified, SelectedEntry.IsFolder);
+            }
+
+            if (SelectedFolder is not null)
+            {
+                return ResultsUi.DetailsMeta(SelectedFolder.Size, SelectedFolder.Modified, isFolder: true);
+            }
+
+            return "";
+        }
+    }
+
+    public bool HasSelectionDetails => SelectedDetailsPath.Length > 0;
 
     public string LastScanText
     {
@@ -483,14 +518,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         TryStart(path);
     }
 
-    public void ShowInExplorer()
+    public void ShowInExplorer(object? parameter)
     {
-        if (SelectedEntry is null)
-        {
-            return;
-        }
-
-        if (!TryGetSafeOpenPath(out var path))
+        if (!TryGetRevealPath(parameter, out var path, out var isFolder))
         {
             MessageBox.Show(
                 "That path is not part of the current scan or no longer exists.",
@@ -505,9 +535,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             Process.Start(new ProcessStartInfo
             {
                 FileName = "explorer.exe",
-                Arguments = SelectedEntry.IsFolder
-                    ? $"\"{path}\""
-                    : $"/select,\"{path}\"",
+                Arguments = isFolder ? $"\"{path}\"" : $"/select,\"{path}\"",
                 UseShellExecute = true,
             });
         }
@@ -517,13 +545,50 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    public void CopyPath()
+    public void CopyPath(object? parameter)
     {
-        if (SelectedEntry is not null)
+        var path = ResultsUi.ContextPath(
+            SelectedEntry?.FullPath,
+            SelectedFolder?.FullPath,
+            ResultsUi.IsTreeContext(parameter));
+        if (path is null)
         {
-            Clipboard.SetText(SelectedEntry.FullPath);
-            StatusText = "Copied " + SelectedEntry.FullPath;
+            return;
         }
+
+        Clipboard.SetText(path);
+        StatusText = "Copied " + path;
+    }
+
+    public void CopyName(object? parameter)
+    {
+        var name = ResultsUi.ContextName(
+            SelectedEntry?.Name,
+            SelectedFolder?.Name,
+            ResultsUi.IsTreeContext(parameter));
+        if (name is null)
+        {
+            return;
+        }
+
+        Clipboard.SetText(name);
+        StatusText = "Copied " + name;
+    }
+
+    private bool CanCopySelection() => SelectedEntry is not null || SelectedFolder is not null;
+
+    private bool CanRevealSelection() => CanCopySelection();
+
+    private FolderNode? TargetFolder(object? parameter)
+    {
+        if (ResultsUi.IsTreeContext(parameter))
+        {
+            return SelectedFolder;
+        }
+
+        return SelectedEntry is { IsFolder: true, Folder: not null }
+            ? SelectedEntry.Folder
+            : SelectedFolder;
     }
 
     private bool CanExcludeSelectedFolder()
@@ -541,11 +606,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         return SelectedFolder?.Parent is not null;
     }
 
-    public void ExcludeSelectedFolder()
+    public void ExcludeSelectedFolder(object? parameter)
     {
-        var node = SelectedEntry is { IsFolder: true, Folder: not null }
-            ? SelectedEntry.Folder
-            : SelectedFolder;
+        var node = TargetFolder(parameter);
         if (node?.Parent is null)
         {
             StatusText = "The scan root cannot be excluded.";
@@ -627,8 +690,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         RefreshTree(parent);
         PersistAllScans();
-        OnPropertyChanged(nameof(SummaryText));
-        OnPropertyChanged(nameof(LastScanText));
+        NotifyPresentation();
     }
 
     private void Browse()
@@ -679,7 +741,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 ScanPath = cached[^1].Root.FullPath;
                 ProgressPath = "";
                 OnPropertyChanged(nameof(LastScanText));
-                OnPropertyChanged(nameof(SummaryText));
+                NotifyPresentation();
                 StatusText = cached.Count == 1
                     ? $"Restored {cached[0].Root.Name}."
                     : $"Restored {cached.Count} scans.";
@@ -695,7 +757,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ScanPath = result.Root.FullPath;
         ProgressPath = "";
         OnPropertyChanged(nameof(LastScanText));
-        OnPropertyChanged(nameof(SummaryText));
+        NotifyPresentation();
 
         var when = FormatScanTime(result.CompletedUtc);
         var elapsed = ScanLocation.FormatDuration(result.Duration);
@@ -769,8 +831,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _scans.Remove(scan);
         RefreshTree(_scans.LastOrDefault()?.Root);
         PersistAllScans();
-        OnPropertyChanged(nameof(SummaryText));
         OnPropertyChanged(nameof(LastScanText));
+        NotifyPresentation();
         StatusText = _scans.Count == 0
             ? "Removed scan. Tree is empty."
             : $"Removed {scan.Root.Name}. {_scans.Count} location(s) remain.";
@@ -801,6 +863,26 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private bool TryGetSafeOpenPath(out string fullPath) =>
         LocalPathGuard.TryValidateOpenPath(SelectedEntry?.FullPath, _scans, out fullPath);
+
+    private bool TryGetRevealPath(object? parameter, out string fullPath, out bool isFolder)
+    {
+        fullPath = "";
+        isFolder = true;
+        if (ResultsUi.IsTreeContext(parameter))
+        {
+            isFolder = true;
+            return LocalPathGuard.TryValidateOpenPath(SelectedFolder?.FullPath, _scans, out fullPath);
+        }
+
+        if (SelectedEntry is not null)
+        {
+            isFolder = SelectedEntry.IsFolder;
+            return TryGetSafeOpenPath(out fullPath);
+        }
+
+        isFolder = true;
+        return LocalPathGuard.TryValidateOpenPath(SelectedFolder?.FullPath, _scans, out fullPath);
+    }
 
     private bool IsSearchActive => BuildSearchQuery().HasCriteria;
 
@@ -931,6 +1013,28 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         SelectedEntry = null;
         Items = new ObservableCollection<EntryRow>(rows);
+        NotifyPresentation();
+    }
+
+    private void NotifyPresentation()
+    {
+        OnPropertyChanged(nameof(EmptyStateText));
+        OnPropertyChanged(nameof(IsEmptyStateVisible));
+        OnPropertyChanged(nameof(ContentsHeaderText));
+        OnPropertyChanged(nameof(SelectedDetailsPath));
+        OnPropertyChanged(nameof(SelectedDetailsMeta));
+        OnPropertyChanged(nameof(HasSelectionDetails));
+        OnPropertyChanged(nameof(SummaryText));
+        OnPropertyChanged(nameof(LastScanText));
+    }
+
+    private void RaiseSelectionCommands()
+    {
+        ((RelayCommand)OpenCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)ShowInExplorerCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)CopyPathCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)CopyNameCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)ExcludeFolderCommand).RaiseCanExecuteChanged();
     }
 
     private void PostToUi(Action action)

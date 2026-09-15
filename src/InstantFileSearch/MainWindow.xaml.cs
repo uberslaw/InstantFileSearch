@@ -96,10 +96,18 @@ public partial class MainWindow : Window
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.F && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+        if (e.Key == Key.F3 ||
+            (e.Key == Key.F && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control))
         {
             SearchBox.Focus();
             SearchBox.SelectAll();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Enter && EntryGrid.IsKeyboardFocusWithin)
+        {
+            Vm.OpenSelected();
             e.Handled = true;
         }
     }
