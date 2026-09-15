@@ -36,10 +36,11 @@ public static class FileNameSearch
                 yield break;
             }
 
-            if (!MatchesSize(file, query)
-                || !MatchesModified(file, query)
-                || !MatchesFolder(file, query)
-                || (hasText && !Matches(file, pattern, wildcard, query.Match)))
+            var sizeOk = MatchesSize(file, query);
+            var modifiedOk = MatchesModified(file, query);
+            var folderOk = MatchesFolder(file, query);
+            var textOk = !hasText || Matches(file, pattern, wildcard, query.Match);
+            if (!sizeOk || !modifiedOk || !folderOk || !textOk)
             {
                 continue;
             }

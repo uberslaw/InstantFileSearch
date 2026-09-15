@@ -157,17 +157,23 @@ public class SearchFilterTests
             File("unique-token.log", "/tmp/other/unique-token.log", 1),
         };
 
-        Assert.Equal("unique-token.log", Assert.Single(FileNameSearch.Filter(files, new SearchQuery
+        var nameQuery = new SearchQuery
         {
             Text = "unique-token",
             Match = SearchMatchMode.Name,
-        })).Name);
+        };
+        Assert.Equal(SearchMatchMode.Name, nameQuery.Match);
+        Assert.False(FileNameSearch.Matches(files[0], "unique-token", false, SearchMatchMode.Name));
+        Assert.True(FileNameSearch.Matches(files[1], "unique-token", false, SearchMatchMode.Name));
+        var nameHits = FileNameSearch.Filter(files, nameQuery).Select(file => file.Name).ToList();
+        Assert.Equal(["unique-token.log"], nameHits);
 
-        Assert.Equal("notes.txt", Assert.Single(FileNameSearch.Filter(files, new SearchQuery
+        var pathHits = FileNameSearch.Filter(files, new SearchQuery
         {
             Text = "unique-token",
             Match = SearchMatchMode.Path,
-        })).Name);
+        }).Select(file => file.Name).OrderBy(name => name).ToList();
+        Assert.Equal(["notes.txt", "unique-token.log"], pathHits);
 
         Assert.Equal(2, FileNameSearch.Filter(files, new SearchQuery
         {
