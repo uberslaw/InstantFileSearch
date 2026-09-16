@@ -127,7 +127,12 @@ public class CliHostTests
             Assert.Contains("Last scan", scanOut);
             Assert.Equal(0, Run(["search", "*.txt"], cache, exclusions, protector, out var searchOut, out _));
             Assert.Contains("notes.txt", searchOut);
+            Assert.Contains("File", searchOut);
             Assert.DoesNotContain("noise.bin", searchOut);
+            Assert.Equal(0, Run(["search", "keep"], cache, exclusions, protector, out var folderOut, out _));
+            Assert.Contains("Folder", folderOut);
+            Assert.Contains(Path.Combine(root, "keep"), folderOut);
+            Assert.DoesNotContain("notes.txt", folderOut);
             Assert.Equal(0, Run(["status"], cache, exclusions, protector, out var status, out _));
             Assert.Contains(root, status);
             Assert.Contains("Excluded folders: 1", status);

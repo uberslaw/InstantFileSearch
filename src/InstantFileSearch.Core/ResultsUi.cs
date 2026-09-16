@@ -39,7 +39,7 @@ public static class ResultsUi
 
         if (isSearchActive)
         {
-            return "No files match this search.";
+            return "Nothing matches this search.";
         }
 
         if (filesAtLevel)
@@ -68,8 +68,8 @@ public static class ResultsUi
         if (isSearchActive)
         {
             return itemCount == 1
-                ? "RESULTS · 1 file"
-                : $"RESULTS · {itemCount.ToString("N0", CultureInfo.InvariantCulture)} files";
+                ? "RESULTS · 1 item"
+                : $"RESULTS · {itemCount.ToString("N0", CultureInfo.InvariantCulture)} items";
         }
 
         if (filesAtLevel)
@@ -168,6 +168,14 @@ public static class ResultsUi
     public static string FilesGlyph() => "\uE8C8";
 
     public static string FileGlyph(bool isFolder) => isFolder ? "\uE8B7" : "\uE7C3";
+
+    /// <summary>
+    /// Select a folder result to highlight it in the left tree. Open / double-click
+    /// shows that folder’s contents and clears the search box (Advanced filters stay
+    /// in the boxes until you change them).
+    /// </summary>
+    public const string FolderResultClickHint =
+        "Select a folder result to highlight it in the left tree. Open or double-click to show its contents (clears the search box).";
 
     private static string? NullIfEmpty(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value;

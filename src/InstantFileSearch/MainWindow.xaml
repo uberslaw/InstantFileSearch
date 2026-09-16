@@ -92,9 +92,9 @@
                     </Grid.ColumnDefinitions>
                     <TextBox x:Name="SearchBox"
                              Grid.Column="0"
-                             Tag="Filter files  ·  wildcards * and ?"
+                             Tag="Search files and folders  ·  * and ? for partial names"
                              Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="Ctrl+F or F3 to focus. Empty text is allowed with Advanced filters."/>
+                             ToolTip="Exact name match (including extension). Use * and ? for partial names. Ctrl+F or F3 to focus. Empty text is allowed with Advanced filters."/>
                     <ToggleButton Grid.Column="1"
                                   Content="Advanced"
                                   Margin="8,0,0,0"
@@ -164,7 +164,7 @@
                             <ComboBox MinWidth="148"
                                       ItemsSource="{Binding MatchModeOptions}"
                                       SelectedItem="{Binding MatchMode}"
-                                      ToolTip="Name or path is the default. Name ignores folder path noise."/>
+                                      ToolTip="Without * or ?, Name equals the whole file or folder name (including extension). Path equals the whole path. Name or path tries both. Use *\cmd or *cmd* for partial paths."/>
                         </StackPanel>
                     </Border>
                 </WrapPanel>
@@ -179,9 +179,19 @@
             </Grid.ColumnDefinitions>
 
             <DockPanel Grid.Column="0" Background="{StaticResource PanelBrush}">
-                <TextBlock DockPanel.Dock="Top"
-                           Style="{StaticResource PanelCaption}"
-                           Text="FOLDERS · largest first"/>
+                <DockPanel DockPanel.Dock="Top" LastChildFill="True" Margin="12,8,8,4">
+                    <ComboBox DockPanel.Dock="Right"
+                              MinWidth="92"
+                              Width="92"
+                              VerticalAlignment="Center"
+                              ItemsSource="{Binding TreeSortOptions}"
+                              SelectedItem="{Binding TreeSortChoice}"
+                              ToolTip="Sort scan roots and folder children. FILES sorts with siblings (name FILES, or its direct-file size). Saved for the next launch."/>
+                    <TextBlock Style="{StaticResource PanelCaption}"
+                               Margin="0"
+                               VerticalAlignment="Center"
+                               Text="FOLDERS"/>
+                </DockPanel>
                 <TreeView x:Name="FolderTree"
                           ItemsSource="{Binding TreeRoots}"
                           SelectedItemChanged="FolderTree_SelectedItemChanged"
@@ -331,6 +341,7 @@
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
                             <DataGridTextColumn Header="Name" Binding="{Binding Name}" SortMemberPath="Name" Width="2*"/>
+                            <DataGridTextColumn Header="Kind" Binding="{Binding Kind}" SortMemberPath="Kind" Width="72"/>
                             <DataGridTextColumn Header="Path" Binding="{Binding FullPath}" SortMemberPath="FullPath" Width="3*"/>
                             <DataGridTemplateColumn Header="Size" Width="150" SortMemberPath="Size">
                                 <DataGridTemplateColumn.CellTemplate>

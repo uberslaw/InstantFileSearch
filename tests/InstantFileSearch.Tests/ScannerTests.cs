@@ -20,7 +20,7 @@ public class ByteFormatterTests
 public class FileNameSearchTests
 {
     [Fact]
-    public void MatchesSubstringAndWildcard()
+    public void MatchesExactNameAndRequiresWildcardForPartial()
     {
         var files = new[]
         {
@@ -28,7 +28,8 @@ public class FileNameSearchTests
             new FileEntry { Name = "notes.txt", FullPath = @"C:\Work\notes.txt", Size = 4, Modified = DateTime.UnixEpoch },
         };
 
-        Assert.Single(FileNameSearch.Filter(files, "report"));
+        Assert.Empty(FileNameSearch.Filter(files, "report"));
+        Assert.Single(FileNameSearch.Filter(files, "Report.xlsx"));
         Assert.Single(FileNameSearch.Filter(files, "*.txt"));
         Assert.Empty(FileNameSearch.Filter(files, "missing"));
     }
@@ -45,9 +46,9 @@ public class FileNameSearchTests
                 Modified = DateTime.UnixEpoch,
             });
 
-        var matches = FileNameSearch.Filter(files, ".txt").ToList();
+        var matches = FileNameSearch.Filter(files, "*.txt").ToList();
         Assert.Equal(FileNameSearch.DefaultLimit, matches.Count);
-        Assert.Equal(3, FileNameSearch.Filter(files, ".txt", limit: 3).Count());
+        Assert.Equal(3, FileNameSearch.Filter(files, "*.txt", limit: 3).Count());
     }
 }
 
@@ -80,7 +81,8 @@ public class FileScannerTests
             Assert.False(string.IsNullOrEmpty(result.Root.DurationText));
             Assert.True(DateTime.UtcNow - result.CompletedUtc < TimeSpan.FromMinutes(1));
             Assert.Single(FileNameSearch.Filter(result.AllFiles, "*.txt"));
-            Assert.Single(FileNameSearch.Filter(result.AllFiles, "video"));
+            Assert.Single(FileNameSearch.Filter(result.AllFiles, "video.bin"));
+            Assert.Empty(FileNameSearch.Filter(result.AllFiles, "video"));
         }
         finally
         {

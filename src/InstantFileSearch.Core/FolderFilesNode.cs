@@ -94,4 +94,59 @@ public static class FolderFilesNode
 
         return allFiles;
     }
+
+    /// <summary>
+    /// Real folders for search. Never yields FILES. Selected-folder scope lists
+    /// descendants of that folder (not the folder itself). FILES selected → none.
+    /// </summary>
+    public static IEnumerable<FolderNode> FoldersForSearch(
+        IEnumerable<FolderNode> roots,
+        FolderNode? selected,
+        bool selectedFolderScope)
+    {
+        ArgumentNullException.ThrowIfNull(roots);
+        if (selectedFolderScope)
+        {
+            if (selected is null || selected.IsFilesNode)
+            {
+                yield break;
+            }
+
+            foreach (var node in EnumerateFolders(selected, includeSelf: false))
+            {
+                yield return node;
+            }
+
+            yield break;
+        }
+
+        foreach (var root in roots)
+        {
+            foreach (var node in EnumerateFolders(root, includeSelf: true))
+            {
+                yield return node;
+            }
+        }
+    }
+
+    private static IEnumerable<FolderNode> EnumerateFolders(FolderNode node, bool includeSelf)
+    {
+        if (node.IsFilesNode)
+        {
+            yield break;
+        }
+
+        if (includeSelf)
+        {
+            yield return node;
+        }
+
+        foreach (var child in node.Folders)
+        {
+            foreach (var nested in EnumerateFolders(child, includeSelf: true))
+            {
+                yield return nested;
+            }
+        }
+    }
 }

@@ -12,7 +12,7 @@ public class ResultsUiTests
         Assert.Equal("Scan a folder to list files here.", ResultsUi.EmptyState(hasScans: false, isSearchActive: false, itemCount: 0));
         Assert.Equal("This folder is empty.", ResultsUi.EmptyState(hasScans: true, isSearchActive: false, itemCount: 0));
         Assert.Equal("No files at this level.", ResultsUi.EmptyState(hasScans: true, isSearchActive: false, itemCount: 0, filesAtLevel: true));
-        Assert.Equal("No files match this search.", ResultsUi.EmptyState(hasScans: true, isSearchActive: true, itemCount: 0));
+        Assert.Equal("Nothing matches this search.", ResultsUi.EmptyState(hasScans: true, isSearchActive: true, itemCount: 0));
         Assert.Equal("", ResultsUi.EmptyState(hasScans: true, isSearchActive: true, itemCount: 3));
     }
 
@@ -24,8 +24,8 @@ public class ResultsUiTests
         Assert.Equal("CONTENTS · 12 items", ResultsUi.ContentsHeader(hasScans: true, isSearchActive: false, itemCount: 12));
         Assert.Equal("Files in work · 1 file", ResultsUi.ContentsHeader(true, false, 1, filesAtLevel: true, folderName: "work"));
         Assert.Equal("Files in this folder · 3 files", ResultsUi.ContentsHeader(true, false, 3, filesAtLevel: true, folderName: null));
-        Assert.Equal("RESULTS · 1 file", ResultsUi.ContentsHeader(hasScans: true, isSearchActive: true, itemCount: 1));
-        Assert.Equal("RESULTS · 0 files", ResultsUi.ContentsHeader(hasScans: true, isSearchActive: true, itemCount: 0));
+        Assert.Equal("RESULTS · 1 item", ResultsUi.ContentsHeader(hasScans: true, isSearchActive: true, itemCount: 1));
+        Assert.Equal("RESULTS · 0 items", ResultsUi.ContentsHeader(hasScans: true, isSearchActive: true, itemCount: 0));
     }
 
     [Fact]
@@ -157,6 +157,8 @@ public class ResultsUiTests
         Assert.NotEqual(ResultsUi.FilesGlyph(), ResultsUi.FolderGlyph(isRoot: true, ScanLocationKind.Local));
         Assert.Equal("\uE8B7", ResultsUi.FileGlyph(isFolder: true));
         Assert.Equal("\uE7C3", ResultsUi.FileGlyph(isFolder: false));
+        Assert.Contains("left tree", ResultsUi.FolderResultClickHint, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("clears the search box", ResultsUi.FolderResultClickHint, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

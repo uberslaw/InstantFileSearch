@@ -96,10 +96,14 @@ public static class CliHost
             return 2;
         }
 
-        var matches = FileNameSearch.Filter(scans.SelectMany(scan => scan.AllFiles), query).ToList();
-        foreach (var file in matches)
+        var matches = FileNameSearch.FilterHits(
+            FolderFilesNode.FoldersForSearch(scans.Select(scan => scan.Root), selected: null, selectedFolderScope: false),
+            scans.SelectMany(scan => scan.AllFiles),
+            new SearchQuery { Text = query }).ToList();
+        foreach (var hit in matches)
         {
-            output.WriteLine($"{ByteFormatter.ToString(file.Size)}\t{file.FullPath}");
+            var kind = hit.IsFolder ? "Folder" : "File";
+            output.WriteLine($"{kind}\t{ByteFormatter.ToString(hit.Size)}\t{hit.FullPath}");
         }
 
         output.WriteLine($"{matches.Count} match(es)");
@@ -217,7 +221,7 @@ public static class CliHost
     {
         output.WriteLine("Instant File Search CLI");
         output.WriteLine("  scan <folder>              Scan and save an encrypted cache");
-        output.WriteLine("  search <query>             Search the last saved scan");
+        output.WriteLine("  search <query>             Exact name (files and folders), or * ? wildcards");
         output.WriteLine("  status                     Last scan time, size, exclusions");
         output.WriteLine("  exclude add|list|remove    Skip folders on future scans");
         output.WriteLine("Shares the GUI cache under %LocalAppData%\\InstantFileSearch");

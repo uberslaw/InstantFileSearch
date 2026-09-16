@@ -23,6 +23,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private int _scanGeneration;
     private int _searchGeneration;
     private readonly List<ScanResult> _scans = [];
+    private readonly string _settingsPath;
+    private TreeSortMode _treeSort;
+    private bool _openingFolderResult;
     private string _scanPath = "";
     private string _searchText = "";
     private string _sizeFromText = "";
@@ -48,7 +51,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _protector = protector ?? ByteProtector.CreateDefault();
         _cachePath = string.IsNullOrWhiteSpace(cachePath) ? ScanCache.DefaultFilePath : cachePath;
         _exclusionsPath = string.IsNullOrWhiteSpace(exclusionsPath) ? ExclusionStore.DefaultFilePath : exclusionsPath;
+        _settingsPath = UiSettingsStore.DefaultFilePath;
         _exclusions = ExclusionStore.Load(_exclusionsPath, _protector);
+        _treeSort = UiSettingsStore.Load(_settingsPath).TreeSort;
         BrowseCommand = new RelayCommand(Browse, () => !IsScanning);
         ScanCommand = new RelayCommand(async () => await ScanAsync(), () => !IsScanning);
         CancelCommand = new RelayCommand(Cancel, () => IsScanning);
@@ -130,6 +135,31 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public IReadOnlyList<string> ScopeOptions { get; } = ["All scans", "Selected folder"];
 
     public IReadOnlyList<string> MatchModeOptions { get; } = ["Name or path", "Name", "Path"];
+
+    public IReadOnlyList<string> TreeSortOptions => TreeSort.Labels;
+
+    public string TreeSortChoice
+    {
+        get => TreeSort.Label(_treeSort);
+        set
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return;
+            }
+
+            var mode = TreeSort.Parse(value);
+            if (_treeSort == mode)
+            {
+                return;
+            }
+
+            _treeSort = mode;
+            OnPropertyChanged();
+            RefreshTree(SelectedFolder);
+            PersistUiSettings();
+        }
+    }
 
     public string SizeFromText
     {
@@ -282,7 +312,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             OnPropertyChanged();
             RaiseSelectionCommands();
             NotifyPresentation();
-            if (IsSearchActive)
+            if (IsSearchActive && !_openingFolderResult)
             {
                 if (IsSelectedFolderScope)
                 {
@@ -305,6 +335,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
             {
                 RaiseSelectionCommands();
                 NotifyPresentation();
+                if (IsSearchActive
+                    && value is { IsFolder: true, Folder: not null }
+                    && !ReferenceEquals(_selectedFolder, value.Folder))
+                {
+                    SelectedFolder = value.Folder;
+                }
             }
         }
     }
@@ -511,9 +547,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
             return;
         }
 
-        if (SelectedEntry.IsFolder && SelectedEntry.Folder is not null && !IsSearchActive)
+        if (SelectedEntry is { IsFolder: true, Folder: { } folder })
         {
-            SelectedFolder = SelectedEntry.Folder;
+            OpenFolderResult(folder);
             return;
         }
 
@@ -816,14 +852,59 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private void RefreshTree(FolderNode? select)
     {
-        TreeRoots.Clear();
         foreach (var scan in _scans)
         {
-            scan.Root.IsExpanded = true;
-            TreeRoots.Add(scan.Root);
+            TreeSort.Apply(scan.Root, _treeSort);
+        }
+
+        var roots = TreeSort.OrderRoots(_scans.Select(scan => scan.Root), _treeSort);
+        TreeRoots.Clear();
+        foreach (var root in roots)
+        {
+            root.IsExpanded = true;
+            TreeRoots.Add(root);
         }
 
         SelectedFolder = select;
+    }
+
+    private void PersistUiSettings()
+    {
+        var path = _settingsPath;
+        var settings = new UiSettings { TreeSort = _treeSort };
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                UiSettingsStore.Save(settings, path);
+            }
+            catch
+            {
+                // Session sort still applies; a settings write must not fail the UI.
+            }
+        });
+    }
+
+    private void OpenFolderResult(FolderNode folder)
+    {
+        _searchGeneration++;
+        _searchCts?.Cancel();
+        if (_searchText.Length > 0)
+        {
+            _searchText = "";
+            OnPropertyChanged(nameof(SearchText));
+        }
+
+        _openingFolderResult = true;
+        try
+        {
+            SelectedFolder = folder;
+            ShowFolderContents();
+        }
+        finally
+        {
+            _openingFolderResult = false;
+        }
     }
 
     private ScanResult? FindScan(FolderNode? node)
@@ -965,15 +1046,20 @@ public sealed class MainViewModel : INotifyPropertyChanged
                     SelectedFolder,
                     IsSelectedFolderScope)
                 .ToList();
-            if (files.Count == 0 || generation != _searchGeneration)
+            var folders = FolderFilesNode.FoldersForSearch(
+                    _scans.Select(scan => scan.Root),
+                    SelectedFolder,
+                    IsSelectedFolderScope)
+                .ToList();
+            if ((files.Count == 0 && folders.Count == 0) || generation != _searchGeneration)
             {
                 return;
             }
 
             var rows = await Task.Run(() =>
             {
-                var matches = FileNameSearch.Filter(files, query);
-                return matches.Select(file => ToFileRow(file, file.Parent?.Size ?? file.Size)).ToList();
+                var matches = FileNameSearch.FilterHits(folders, files, query);
+                return matches.Select(ToRow).ToList();
             }, token);
 
             if (generation != _searchGeneration)
@@ -1002,7 +1088,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var label = string.IsNullOrWhiteSpace(query.Text) ? "filters" : $"\"{query.Text.Trim()}\"";
         return count == FileNameSearch.DefaultLimit
             ? $"Showing first {FileNameSearch.DefaultLimit:N0} matches for {label}"
-            : $"{count:N0} files match {label}";
+            : $"{count:N0} matches for {label}";
     }
 
     private void ShowFolderContents()
@@ -1019,17 +1105,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var rows = new List<EntryRow>(folders.Count + files.Count);
         foreach (var folder in folders)
         {
-            rows.Add(new EntryRow
-            {
-                Name = folder.Name,
-                FullPath = folder.FullPath,
-                Kind = "Folder",
-                IsFolder = true,
-                Size = folder.Size,
-                Modified = folder.Modified,
-                Percent = parentSize <= 0 ? 0 : folder.Size * 100.0 / parentSize,
-                Folder = folder,
-            });
+            rows.Add(ToFolderRow(folder, parentSize));
         }
 
         foreach (var file in files)
@@ -1089,6 +1165,29 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private static string FormatScanTime(DateTime utc) =>
         (utc == default ? DateTime.UtcNow : utc).ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+
+    private static EntryRow ToRow(SearchHit hit)
+    {
+        if (hit.IsFolder && hit.Folder is not null)
+        {
+            return ToFolderRow(hit.Folder, hit.Folder.Parent?.Size ?? hit.Size);
+        }
+
+        var file = hit.File ?? throw new InvalidOperationException("File search hit is missing File.");
+        return ToFileRow(file, file.Parent?.Size ?? file.Size);
+    }
+
+    private static EntryRow ToFolderRow(FolderNode folder, long parentSize) => new()
+    {
+        Name = folder.Name,
+        FullPath = folder.FullPath,
+        Kind = "Folder",
+        IsFolder = true,
+        Size = folder.Size,
+        Modified = folder.Modified,
+        Percent = parentSize <= 0 ? 0 : folder.Size * 100.0 / parentSize,
+        Folder = folder,
+    };
 
     private static EntryRow ToFileRow(FileEntry file, long parentSize) => new()
     {

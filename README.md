@@ -5,9 +5,14 @@ Windows disk explorer in the TreeSize mold: scan a folder, see the largest direc
 ## What it does
 
 - Scans a drive or folder in the background (reparse points — junctions and symlinks — skipped; access-denied paths ignored)
-- Shows a folder tree sorted by size, with percent-of-parent bars. Each distinct scanned location is a top-level root (`this PC` or `network`) with that scan’s duration. Scanning the same path again replaces that root; different paths accumulate. Right-click a root → **Remove from list** (does not delete files). Each completed scan is appended to `%LocalAppData%\InstantFileSearch\logs\scans.log`.
+- Shows a folder tree (default: largest first) with percent-of-parent bars. Each distinct scanned location is a top-level root (`this PC` or `network`) with that scan’s duration. Scanning the same path again replaces that root; different paths accumulate. Right-click a root → **Remove from list** (does not delete files). Each completed scan is appended to `%LocalAppData%\InstantFileSearch\logs\scans.log`.
 - Lists files and subfolders for the selected directory
-- Instant search across the scanned index (`*.log`, `report`, full path text; first 5,000 matches). Typing is debounced (200 ms) and filtered off the UI thread. **Advanced** (collapsed by default) adds size from/to (B–TB, 1024-based), modified from/to (`yyyy-MM-dd`), scope (all scans or the selected folder), and match (name, path, or both). Empty bounds mean no limit; size-only search is allowed. Filters apply to the in-memory index and are not saved.
+- Instant search across the scanned index: files **and folders** (not the synthetic **FILES** row). Default is a case-insensitive **whole-name** match, including the extension (`cmd` does not match `cmd.exe` or `anythingwithcmdinit`). Wildcards: `*` any run of characters, `?` one character (`cmd*`, `*cmd`, `*cmd*`). **Advanced** (collapsed by default) adds size from/to (B–TB, 1024-based), modified from/to (`yyyy-MM-dd`), scope (all scans or the selected folder), and match field:
+  - **Name** — equality / wildcard on `Name` (scan roots use the displayed name, e.g. `C:\Work (this PC)`; nested folders use the directory name, including extension if any)
+  - **Path** — equality on the full path when there are no wildcards (use `*\cmd` or `*\cmd.exe` for a last segment); wildcards run against the full path
+  - **Name or path** (default) — either field
+  Empty bounds mean no limit; size/date-only search is allowed. Typing is debounced (200 ms) and filtered off the UI thread (first 5,000 matches). Filters apply to the in-memory index and are not saved.
+- Left tree: sort scan roots and each folder’s children **A–Z**, **Z–A**, **Size ↓** (largest first, default), or **Size ↑**. **FILES** sorts with siblings (name `FILES`, or its direct-file size). The choice is saved in `%LocalAppData%\InstantFileSearch\ui-settings.json` (plain JSON, not encrypted). The tree is re-sorted when you change the combo and when a scan completes — not on every file during a scan.
 - Restores the last successful scan from disk on launch (including when it ran); Scan again to refresh.
 - Right-click a folder to exclude it from this view and future scans (`Scan` → Excluded folders… to undo)
 - CLI for scan / search / status / exclude (same encrypted cache as the GUI)
@@ -47,8 +52,8 @@ Linux/macOS can build the same pack (`pwsh -File scripts/PortablePublish.ps1 -De
 
 1. Browse or drop a folder
 2. Scan
-3. Click folders on the left (largest at the top). Right-click → **Show in Explorer** opens that folder (`FILES` opens the parent). Right-click a scan root → **Remove from list** drops that location from the tree and search (files on disk stay).
-4. Type in Search to filter files (`Ctrl+F`). Open **Advanced** for size, date, folder scope, and name vs path.
+3. Click folders on the left. Use the sort combo (**A–Z**, **Z–A**, **Size ↓**, **Size ↑**) to browse. Right-click → **Show in Explorer** opens that folder (`FILES` opens the parent). Right-click a scan root → **Remove from list** drops that location from the tree and search (files on disk stay).
+4. Type in Search (`Ctrl+F`) for an exact file or folder name, or use `*` / `?` for partial names. Open **Advanced** for size, date, folder scope, and name vs path. Select a folder result to highlight it in the left tree; Open or double-click to show that folder’s contents (clears the search box). Show in Explorer still opens Windows Explorer.
 5. Close and reopen: the last scan and its time come back from `%LocalAppData%\InstantFileSearch`
 6. Right-click a folder → Exclude folder to skip it next time
 
@@ -59,6 +64,7 @@ The GUI is still the right place for the size tree. A console app covers the sam
 ```powershell
 dotnet run --project src/InstantFileSearch.Cli -- scan C:\Work
 dotnet run --project src/InstantFileSearch.Cli -- search *.log
+dotnet run --project src/InstantFileSearch.Cli -- search cmd.exe
 dotnet run --project src/InstantFileSearch.Cli -- status
 dotnet run --project src/InstantFileSearch.Cli -- exclude add C:\Work\node_modules
 dotnet run --project src/InstantFileSearch.Cli -- exclude list
@@ -100,4 +106,4 @@ There is no Windows service and no Python/venv UI.
 - Runtime: Windows x64, .NET 8 Desktop (or the self-contained publish / portable pack)
 - Network: none
 - Permissions: read access to the folder you scan; no elevation required
-- Data: the last successful scan is `%LocalAppData%\InstantFileSearch\last-scan.bin`, DPAPI-encrypted for the current Windows user (other local accounts cannot read it). Exclusions are `%LocalAppData%\InstantFileSearch\exclusions.bin`, same protection. It is a snapshot, not a live disk view. Administrators on the same machine can still access a logged-in user's DPAPI data.
+- Data: the last successful scan is `%LocalAppData%\InstantFileSearch\last-scan.bin`, DPAPI-encrypted for the current Windows user (other local accounts cannot read it). Exclusions are `%LocalAppData%\InstantFileSearch\exclusions.bin`, same protection. Tree sort is `%LocalAppData%\InstantFileSearch\ui-settings.json` (plain JSON). The scan is a snapshot, not a live disk view. Administrators on the same machine can still access a logged-in user's DPAPI data.

@@ -462,6 +462,9 @@
             <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
             <Setter Property="SnapsToDevicePixels" Value="True"/>
             <Style.Triggers>
+                <DataTrigger Binding="{Binding IsFolder}" Value="True">
+                    <Setter Property="FontWeight" Value="SemiBold"/>
+                </DataTrigger>
                 <Trigger Property="IsMouseOver" Value="True">
                     <Setter Property="Background" Value="#2E3540"/>
                 </Trigger>
