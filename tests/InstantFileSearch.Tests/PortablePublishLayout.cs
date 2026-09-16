@@ -58,6 +58,7 @@ public static class PortablePublishLayout
         ("PublishSingleFile", "true"),
         ("EnableCompressionInSingleFile", "true"),
         ("IncludeNativeLibrariesForSelfExtract", "true"),
+        ("EnableWindowsTargeting", "true"),
         ("DebugType", "None"),
         ("DebugSymbols", "false")
     ];
@@ -76,6 +77,7 @@ public static class PortablePublishLayout
             "-p:PublishSingleFile=true",
             "-p:EnableCompressionInSingleFile=true",
             "-p:IncludeNativeLibrariesForSelfExtract=true",
+            "-p:EnableWindowsTargeting=true",
             "-p:DebugType=None",
             "-p:DebugSymbols=false",
             "-o", outputDirectory
@@ -262,6 +264,10 @@ public static class PortablePublishLayout
     {
         if (string.IsNullOrWhiteSpace(relativePath))
             return "";
-        return Path.GetFileName(relativePath.Replace('/', Path.DirectorySeparatorChar));
+        // Slash-insensitive: Path.GetFileName treats only the OS separator as a
+        // directory break, so `publish\wpfgfx_cor3.dll` would stay whole on Linux.
+        var normalized = relativePath.Replace('\\', '/').TrimEnd('/');
+        var slash = normalized.LastIndexOf('/');
+        return slash < 0 ? normalized : normalized[(slash + 1)..];
     }
 }

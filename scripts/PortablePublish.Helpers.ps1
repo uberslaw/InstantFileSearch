@@ -46,6 +46,7 @@ function Get-IfsPortableDotnetPublishArgumentList {
         '-p:PublishSingleFile=true'
         '-p:EnableCompressionInSingleFile=true'
         '-p:IncludeNativeLibrariesForSelfExtract=true'
+        '-p:EnableWindowsTargeting=true'
         '-p:DebugType=None'
         '-p:DebugSymbols=false'
         '-o', $OutputDirectory
@@ -55,7 +56,10 @@ function Get-IfsPortableDotnetPublishArgumentList {
 function Get-IfsPortableFileName {
     param([string]$RelativePath)
     if ([string]::IsNullOrWhiteSpace($RelativePath)) { return '' }
-    return [System.IO.Path]::GetFileName($RelativePath.Replace('/', [System.IO.Path]::DirectorySeparatorChar))
+    $normalized = $RelativePath.Replace('\', '/').TrimEnd('/')
+    $slash = $normalized.LastIndexOf('/')
+    if ($slash -lt 0) { return $normalized }
+    return $normalized.Substring($slash + 1)
 }
 
 function Test-IfsPortableRuntimesFolder {

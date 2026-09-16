@@ -17,7 +17,7 @@ if (-not (Test-Path -LiteralPath $helpers)) {
 function Get-IfsRepoRoot {
     $root = Split-Path -Parent $PSScriptRoot
     $slnx = Join-Path $root 'InstantFileSearch.slnx'
-    $wpf = Join-Path $root 'src\InstantFileSearch\InstantFileSearch.csproj'
+    $wpf = Join-Path $root 'src/InstantFileSearch/InstantFileSearch.csproj'
     if (-not (Test-Path -LiteralPath $slnx) -or -not (Test-Path -LiteralPath $wpf)) {
         throw "Could not find Instant File Search repo root above $PSScriptRoot"
     }
@@ -127,25 +127,21 @@ function Copy-IfsPortablePublishOutput {
     }
 }
 
-if (-not (Test-IfsPortableRunningOnWindows)) {
-    throw 'Portable pack must run on Windows (WPF win-x64 publish). Linux/macOS cannot produce InstantFileSearch.exe.'
-}
-
 $dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
 if (-not $dotnet) {
     throw 'The .NET 8 SDK is required on this build machine (not on the PC that will run the portable folder).'
 }
 
 $root = Get-IfsRepoRoot
-$wpfProject = Join-Path $root 'src\InstantFileSearch\InstantFileSearch.csproj'
-$cliProject = Join-Path $root 'src\InstantFileSearch.Cli\InstantFileSearch.Cli.csproj'
+$wpfProject = Join-Path $root 'src/InstantFileSearch/InstantFileSearch.csproj'
+$cliProject = Join-Path $root 'src/InstantFileSearch.Cli/InstantFileSearch.Cli.csproj'
 
 $picked = $Destination
 if ([string]::IsNullOrWhiteSpace($picked)) {
-    if ($NonInteractive) {
-        throw 'Destination folder is required in -NonInteractive mode; do not default to bin/ or dist/.'
+    if ($NonInteractive -or -not (Test-IfsPortableRunningOnWindows)) {
+        throw 'Destination folder is required (folder picker is Windows-only; do not default to bin/ or dist/). The packed folder still only runs on Windows x64.'
     }
-    $picked = Read-IfsDestinationFolder -PromptText 'Choose a folder for the Instant File Search portable copy (GUI + CLI). A InstantFileSearch subfolder is created unless you pick one with that name.'
+    $picked = Read-IfsDestinationFolder -PromptText 'Choose a folder for the Instant File Search portable copy (GUI + CLI). An InstantFileSearch subfolder is created unless you pick one with that name.'
 }
 if ([string]::IsNullOrWhiteSpace($picked)) {
     throw 'No destination folder selected. Refusing to dump into the repo (bin/, dist/, or otherwise).'

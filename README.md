@@ -39,7 +39,9 @@ Portable folder for another PC (GUI + CLI, both self-contained single-file `win-
 .\scripts\PortablePublish.cmd
 ```
 
-Pick a destination folder (folder picker, or `Read-Host` if the picker is unavailable). The script creates `InstantFileSearch\` there unless you already picked a folder with that name. Pass `-Destination D:\Apps` to skip the prompt (`-NonInteractive` refuses to guess `bin\` or `dist\`). Run this on **Windows** with the .NET 8 SDK; the packed folder then runs without installing the SDK or Desktop Runtime.
+Pick a destination folder (folder picker, or `Read-Host` if the picker is unavailable). The script creates `InstantFileSearch\` there unless you already picked a folder with that name. Pass `-Destination D:\Apps` to skip the prompt (`-NonInteractive` refuses to guess `bin\` or `dist\`). The .NET 8 SDK is required on the **build** machine; the packed folder then runs on Windows x64 without the SDK or Desktop Runtime.
+
+Linux/macOS can build the same pack (`pwsh -File scripts/PortablePublish.ps1 -Destination /tmp/ifs-pack`): publish passes `-p:EnableWindowsTargeting=true`. A dry-run here produced only `InstantFileSearch.exe` and `InstantFileSearch.Cli.exe` (no PDB, no `runtimes\`, no extra DLLs). Those exes still only run on Windows x64.
 
 
 ## Use

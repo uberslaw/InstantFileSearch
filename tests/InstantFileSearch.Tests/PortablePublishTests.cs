@@ -26,6 +26,7 @@ public class PortablePublishTests
             "-p:PublishSingleFile=true",
             "-p:EnableCompressionInSingleFile=true",
             "-p:IncludeNativeLibrariesForSelfExtract=true",
+            "-p:EnableWindowsTargeting=true",
             "-p:DebugType=None",
             "-p:DebugSymbols=false",
             "-o", "out"
@@ -41,6 +42,7 @@ public class PortablePublishTests
         Assert.True(PortablePublishLayout.ShouldCopyPublishedFile("InstantFileSearch.Cli.exe"));
         Assert.True(PortablePublishLayout.ShouldCopyPublishedFile("wpfgfx_cor3.dll"));
         Assert.True(PortablePublishLayout.ShouldCopyPublishedFile(@"publish\PresentationNative_cor3.dll"));
+        Assert.True(PortablePublishLayout.ShouldCopyPublishedFile("publish/D3DCompiler_47_cor3.dll"));
 
         Assert.False(PortablePublishLayout.ShouldCopyPublishedFile("InstantFileSearch.pdb"));
         Assert.False(PortablePublishLayout.ShouldCopyPublishedFile("InstantFileSearch.xml"));
@@ -170,12 +172,14 @@ public class PortablePublishTests
         var helpers = File.ReadAllText(Path.Combine(root, "scripts", "PortablePublish.Helpers.ps1"));
 
         Assert.Contains("PortablePublish.Helpers.ps1", ps1, StringComparison.Ordinal);
-        Assert.Contains("src\\InstantFileSearch\\InstantFileSearch.csproj", ps1, StringComparison.Ordinal);
-        Assert.Contains("src\\InstantFileSearch.Cli\\InstantFileSearch.Cli.csproj", ps1, StringComparison.Ordinal);
+        Assert.Contains("src/InstantFileSearch/InstantFileSearch.csproj", ps1, StringComparison.Ordinal);
+        Assert.Contains("src/InstantFileSearch.Cli/InstantFileSearch.Cli.csproj", ps1, StringComparison.Ordinal);
         Assert.Contains("BrowseForFolder", ps1, StringComparison.Ordinal);
         Assert.Contains("FolderBrowserDialog", ps1, StringComparison.Ordinal);
         Assert.Contains("Read-Host", ps1, StringComparison.Ordinal);
         Assert.Contains("NonInteractive", ps1, StringComparison.Ordinal);
+        Assert.Contains("folder picker is Windows-only", ps1, StringComparison.Ordinal);
+        Assert.DoesNotContain("Linux/macOS cannot produce InstantFileSearch.exe", ps1, StringComparison.Ordinal);
         Assert.DoesNotContain("Join-Path $root \"dist\"", ps1, StringComparison.Ordinal);
         Assert.DoesNotContain("Join-Path $root 'dist'", ps1, StringComparison.Ordinal);
         Assert.Contains("do not default", helpers, StringComparison.OrdinalIgnoreCase);
