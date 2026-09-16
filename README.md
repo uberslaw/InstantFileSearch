@@ -43,7 +43,6 @@ Pick a destination folder (folder picker, or `Read-Host` if the picker is unavai
 
 Linux/macOS can build the same pack (`pwsh -File scripts/PortablePublish.ps1 -Destination /tmp/ifs-pack`): publish passes `-p:EnableWindowsTargeting=true`. A dry-run here produced only `InstantFileSearch.exe` and `InstantFileSearch.Cli.exe` (no PDB, no `runtimes\`, no extra DLLs). Those exes still only run on Windows x64.
 
-
 ## Use
 
 1. Browse or drop a folder
