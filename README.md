@@ -31,7 +31,17 @@ Self-contained exe (no runtime install on the target PC):
 .\publish.ps1
 ```
 
-Output is `dist\InstantFileSearch.exe` and `dist\InstantFileSearch.Cli.exe`.
+Output is `dist\InstantFileSearch.exe` and `dist\InstantFileSearch.Cli.exe` (developer copy next to the repo; the CLI from this script is framework-dependent).
+
+Portable folder for another PC (GUI + CLI, both self-contained single-file `win-x64`, compressed; no SDK, no obj/bin, no PDB, no runtime-pack DLL dump):
+
+```powershell
+.\scripts\PortablePublish.cmd
+```
+
+Pick a destination folder (folder picker, or `Read-Host` if the picker is unavailable). The script creates `InstantFileSearch\` there unless you already picked a folder with that name. Pass `-Destination D:\Apps` to skip the prompt (`-NonInteractive` refuses to guess `bin\` or `dist\`). The .NET 8 SDK is required on the **build** machine; the packed folder then runs on Windows x64 without the SDK or Desktop Runtime.
+
+Linux/macOS can build the same pack (`pwsh -File scripts/PortablePublish.ps1 -Destination /tmp/ifs-pack`): publish passes `-p:EnableWindowsTargeting=true`. A dry-run here produced only `InstantFileSearch.exe` and `InstantFileSearch.Cli.exe` (no PDB, no `runtimes\`, no extra DLLs). Those exes still only run on Windows x64.
 
 ## Use
 
@@ -79,7 +89,7 @@ The LC project references `LaunchControl.Standard` from [master-launch-control](
 | Rebuild Release / Debug | `dotnet build` of the WPF project; output streams into the pane. |
 | Run Release / Debug | Sets last config and launches (refuses if already running). |
 | Open CLI | `wt` if present, else `cmd.exe`, at the **repo root**. Log line says where it opened. |
-| Publish | `publish.ps1` → `dist\InstantFileSearch.exe`. |
+| Publish | `publish.ps1` → `dist\InstantFileSearch.exe`. Portable pack is `scripts\PortablePublish.cmd` (folder picker), not an LC button — the picker cannot run in the LC redirected log pane. |
 | Run tests | `dotnet test` on `tests\InstantFileSearch.Tests` (not the `.slnx`). |
 | Open solution / project / dist / logs | Explorer (or the default app for `.slnx`). |
 
@@ -87,7 +97,7 @@ There is no Windows service and no Python/venv UI.
 
 ## Assumptions
 
-- Runtime: Windows x64, .NET 8 Desktop (or the self-contained publish)
+- Runtime: Windows x64, .NET 8 Desktop (or the self-contained publish / portable pack)
 - Network: none
 - Permissions: read access to the folder you scan; no elevation required
 - Data: the last successful scan is `%LocalAppData%\InstantFileSearch\last-scan.bin`, DPAPI-encrypted for the current Windows user (other local accounts cannot read it). Exclusions are `%LocalAppData%\InstantFileSearch\exclusions.bin`, same protection. It is a snapshot, not a live disk view. Administrators on the same machine can still access a logged-in user's DPAPI data.
