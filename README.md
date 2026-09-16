@@ -47,7 +47,7 @@ Linux/macOS can build the same pack (`pwsh -File scripts/PortablePublish.ps1 -De
 
 1. Browse or drop a folder
 2. Scan
-3. Click folders on the left (largest at the top)
+3. Click folders on the left (largest at the top). Right-click → **Show in Explorer** opens that folder (`FILES` opens the parent).
 4. Type in Search to filter files (`Ctrl+F`). Open **Advanced** for size, date, folder scope, and name vs path.
 5. Close and reopen: the last scan and its time come back from `%LocalAppData%\InstantFileSearch`
 6. Right-click a folder → Exclude folder to skip it next time

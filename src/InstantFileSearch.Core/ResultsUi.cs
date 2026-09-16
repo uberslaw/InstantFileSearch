@@ -3,7 +3,7 @@ using System.Globalization;
 namespace InstantFileSearch;
 
 /// <summary>
-/// Copy and predicates for the tree/results chrome. WPF binds these strings;
+/// Copy, Explorer, and predicates for the tree/results chrome. WPF binds these strings;
 /// tests lock the empty-state and context-menu rules without a Windows UI thread.
 /// </summary>
 public static class ResultsUi
@@ -92,6 +92,32 @@ public static class ResultsUi
 
     public static string? ContextName(string? entryName, string? folderName, bool treeContext) =>
         treeContext ? NullIfEmpty(folderName) : NullIfEmpty(entryName) ?? NullIfEmpty(folderName);
+
+    /// <summary>
+    /// Folder Explorer should open for a left-tree node. FILES is not a
+    /// filesystem path — use the parent folder. Never throws on null/empty.
+    /// </summary>
+    public static string? TreeExplorerPath(FolderNode? node)
+    {
+        if (node is null)
+        {
+            return null;
+        }
+
+        if (node.IsFilesNode)
+        {
+            return NullIfEmpty(node.Parent?.FullPath) ?? NullIfEmpty(node.FullPath);
+        }
+
+        return NullIfEmpty(node.FullPath);
+    }
+
+    /// <summary>
+    /// <c>explorer.exe</c> arguments: open a folder, or <c>/select</c> a file.
+    /// UNC paths are passed through quoted; do not convert them to local paths.
+    /// </summary>
+    public static string ExplorerArguments(string path, bool isFolder) =>
+        isFolder ? $"\"{path}\"" : $"/select,\"{path}\"";
 
     public static string FormatPercent(double percent, bool isRoot)
     {

@@ -548,7 +548,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             Process.Start(new ProcessStartInfo
             {
                 FileName = "explorer.exe",
-                Arguments = isFolder ? $"\"{path}\"" : $"/select,\"{path}\"",
+                Arguments = ResultsUi.ExplorerArguments(path, isFolder),
                 UseShellExecute = true,
             });
         }
@@ -891,7 +891,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         if (ResultsUi.IsTreeContext(parameter))
         {
             isFolder = true;
-            return LocalPathGuard.TryValidateOpenPath(SelectedFolder?.FullPath, _scans, out fullPath);
+            return LocalPathGuard.TryValidateOpenPath(
+                ResultsUi.TreeExplorerPath(SelectedFolder), _scans, out fullPath);
         }
 
         if (SelectedEntry is not null)
@@ -901,7 +902,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
 
         isFolder = true;
-        return LocalPathGuard.TryValidateOpenPath(SelectedFolder?.FullPath, _scans, out fullPath);
+        return LocalPathGuard.TryValidateOpenPath(
+            ResultsUi.TreeExplorerPath(SelectedFolder), _scans, out fullPath);
     }
 
     private bool IsSearchActive => BuildSearchQuery().HasCriteria;

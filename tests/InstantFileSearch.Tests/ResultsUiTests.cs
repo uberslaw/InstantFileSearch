@@ -52,6 +52,63 @@ public class ResultsUiTests
     }
 
     [Fact]
+    public void TreeExplorerPathOpensFolderAndFilesParent()
+    {
+        var root = new FolderNode { Name = "work", FullPath = @"C:\work" };
+        Assert.Equal(@"C:\work", ResultsUi.TreeExplorerPath(root));
+
+        var child = new FolderNode { Name = "src", FullPath = @"C:\work\src", Parent = root };
+        Assert.Equal(@"C:\work\src", ResultsUi.TreeExplorerPath(child));
+
+        var unc = new FolderNode { Name = "docs", FullPath = @"\\fileserver\share\docs" };
+        Assert.Equal(@"\\fileserver\share\docs", ResultsUi.TreeExplorerPath(unc));
+
+        var files = new FolderNode
+        {
+            Name = FolderFilesNode.DisplayName,
+            FullPath = "not-a-real-path",
+            Parent = root,
+            IsFilesNode = true,
+        };
+        Assert.Equal(@"C:\work", ResultsUi.TreeExplorerPath(files));
+
+        var uncFiles = new FolderNode
+        {
+            Name = FolderFilesNode.DisplayName,
+            FullPath = "not-a-real-path",
+            Parent = unc,
+            IsFilesNode = true,
+        };
+        Assert.Equal(@"\\fileserver\share\docs", ResultsUi.TreeExplorerPath(uncFiles));
+
+        var orphanFiles = new FolderNode
+        {
+            Name = FolderFilesNode.DisplayName,
+            FullPath = @"\\fileserver\share",
+            IsFilesNode = true,
+        };
+        Assert.Equal(@"\\fileserver\share", ResultsUi.TreeExplorerPath(orphanFiles));
+
+        Assert.Null(ResultsUi.TreeExplorerPath(null));
+        Assert.Null(ResultsUi.TreeExplorerPath(new FolderNode { Name = "empty", FullPath = "  " }));
+        Assert.Null(ResultsUi.TreeExplorerPath(new FolderNode
+        {
+            Name = FolderFilesNode.DisplayName,
+            FullPath = "",
+            IsFilesNode = true,
+        }));
+    }
+
+    [Fact]
+    public void ExplorerArgumentsOpenFolderAndSelectFile()
+    {
+        Assert.Equal(@"""C:\work""", ResultsUi.ExplorerArguments(@"C:\work", isFolder: true));
+        Assert.Equal(@"/select,""C:\work\a.txt""", ResultsUi.ExplorerArguments(@"C:\work\a.txt", isFolder: false));
+        Assert.Equal(@"""\\fileserver\share\docs""", ResultsUi.ExplorerArguments(@"\\fileserver\share\docs", isFolder: true));
+        Assert.Equal(@"/select,""\\fileserver\share\a.txt""", ResultsUi.ExplorerArguments(@"\\fileserver\share\a.txt", isFolder: false));
+    }
+
+    [Fact]
     public void PercentHidesOnRootsAndFloorsTinyShares()
     {
         Assert.Equal("", ResultsUi.FormatPercent(100, isRoot: true));

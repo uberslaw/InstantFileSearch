@@ -92,6 +92,8 @@ public class FolderFilesNodeTests
         Assert.False(FolderFilesNode.CanExclude(filesNode));
         Assert.False(FolderFilesNode.CanExclude(root));
         Assert.Equal(@"C:\work", filesNode.FullPath);
+        Assert.Equal(@"C:\work", ResultsUi.TreeExplorerPath(filesNode));
+        Assert.Equal(@"C:\work", ResultsUi.TreeExplorerPath(root));
         Assert.Equal(@"C:\work", ResultsUi.ContextPath(@"C:\work\a.txt", filesNode.FullPath, treeContext: true));
         Assert.Equal(FolderFilesNode.DisplayName, ResultsUi.ContextName("a.txt", filesNode.Name, treeContext: true));
         Assert.Equal("Files  ·  10 B", ResultsUi.DetailsMeta(filesNode.Size, DateTime.MinValue, isFolder: true, isFilesNode: true));
