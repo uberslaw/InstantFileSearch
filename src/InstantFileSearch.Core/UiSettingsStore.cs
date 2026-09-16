@@ -1,10 +1,11 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 
 namespace InstantFileSearch;
 
 public sealed class UiSettings
 {
-    public TreeSortMode TreeSort { get; init; } = TreeSort.Default;
+    public TreeSortMode TreeSort { get; init; } = TreeSortMode.SizeDescending;
 }
 
 /// <summary>
@@ -12,6 +13,11 @@ public sealed class UiSettings
 /// </summary>
 public static class UiSettingsStore
 {
+    private static readonly JsonSerializerOptions Json = new()
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
     public static string DefaultFilePath =>
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -58,7 +64,7 @@ public static class UiSettingsStore
         var json = JsonSerializer.Serialize(new Document
         {
             TreeSort = TreeSort.Label(settings.TreeSort),
-        });
+        }, Json);
         var tmp = path + ".tmp";
         File.WriteAllText(tmp, json);
         File.Move(tmp, path, overwrite: true);
