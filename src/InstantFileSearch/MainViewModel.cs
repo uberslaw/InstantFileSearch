@@ -281,7 +281,6 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
             OnPropertyChanged();
             RaiseSelectionCommands();
-            ((RelayCommand)RemoveScanCommand).RaiseCanExecuteChanged();
             NotifyPresentation();
             if (IsSearchActive)
             {
@@ -839,23 +838,31 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     private bool CanRemoveSelectedScan() =>
-        !IsScanning && FolderFilesNode.IsScanRoot(SelectedFolder) && FindScan(SelectedFolder) is not null;
+        ResultsUi.ShowRemoveFromList(SelectedFolder, IsScanning) && FindScan(SelectedFolder) is not null;
 
     public void RemoveSelectedScan()
     {
-        if (!FolderFilesNode.IsScanRoot(SelectedFolder) || FindScan(SelectedFolder) is not { } scan)
+        if (!ResultsUi.ShowRemoveFromList(SelectedFolder, IsScanning))
         {
             return;
         }
 
-        _scans.Remove(scan);
+        var remaining = ScanCache.WithoutRoot(_scans, SelectedFolder);
+        if (remaining.Count == _scans.Count)
+        {
+            return;
+        }
+
+        var name = SelectedFolder!.Name;
+        _scans.Clear();
+        _scans.AddRange(remaining);
         RefreshTree(_scans.LastOrDefault()?.Root);
         PersistAllScans();
-        OnPropertyChanged(nameof(LastScanText));
+        ScheduleItemRefresh();
         NotifyPresentation();
         StatusText = _scans.Count == 0
-            ? "Removed scan. Tree is empty."
-            : $"Removed {scan.Root.Name}. {_scans.Count} location(s) remain.";
+            ? "Removed from list. Tree is empty."
+            : $"Removed {name} from the list. {_scans.Count} location(s) remain.";
     }
 
     private void PersistAllScans()
@@ -1066,6 +1073,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ((RelayCommand)CopyPathCommand).RaiseCanExecuteChanged();
         ((RelayCommand)CopyNameCommand).RaiseCanExecuteChanged();
         ((RelayCommand)ExcludeFolderCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)RemoveScanCommand).RaiseCanExecuteChanged();
     }
 
     private void PostToUi(Action action)

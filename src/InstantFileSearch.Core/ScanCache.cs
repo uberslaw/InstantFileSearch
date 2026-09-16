@@ -37,6 +37,22 @@ public static class ScanCache
         return list;
     }
 
+    /// <summary>
+    /// Drops one scan-root from the in-app list. Nested folders and FILES are ignored
+    /// so a context click cannot delete the parent scan. Does not touch disk files.
+    /// </summary>
+    public static IReadOnlyList<ScanResult> WithoutRoot(IReadOnlyList<ScanResult>? existing, FolderNode? node)
+    {
+        var list = existing?.ToList() ?? [];
+        if (!FolderFilesNode.IsScanRoot(node))
+        {
+            return list;
+        }
+
+        list.RemoveAll(scan => SameFolder(scan.Root, node));
+        return list;
+    }
+
     public static void Save(ScanResult result, string filePath, IByteProtector? protector = null) =>
         SaveAll([result], filePath, protector);
 
@@ -80,30 +96,41 @@ public static class ScanCache
         }
 
         byte[] bytes;
-        if (ProtectedFile.TryReadAll(filePath, protector, out bytes)
-            && TryParse(bytes, out var parsed))
+        if (ProtectedFile.TryReadAll(filePath, protector, out bytes))
         {
-            results = parsed;
-            return parsed.Count > 0;
+            // A readable primary file wins, including an empty scan list after
+            // the last root was removed. Do not overlay a stale sibling .json.
+            if (TryParse(bytes, out var parsed))
+            {
+                results = parsed;
+                return parsed.Count > 0;
+            }
+
+            return false;
         }
 
         var legacyJson = Path.ChangeExtension(filePath, ".json");
         if (!filePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
             && File.Exists(legacyJson)
             && ProtectedFile.TryReadAll(legacyJson, protector, out bytes)
-            && TryParse(bytes, out parsed))
+            && TryParse(bytes, out var legacy))
         {
-            results = parsed;
-            return parsed.Count > 0;
+            results = legacy;
+            return legacy.Count > 0;
         }
 
         return false;
     }
 
     private static bool SameRoot(ScanResult left, ScanResult right) =>
-        LocalPathGuard.TryGetFullPath(left.Root.FullPath, out var a)
-        && LocalPathGuard.TryGetFullPath(right.Root.FullPath, out var b)
-        && a.Equals(b, LocalPathGuard.Comparison);
+        SameFolder(left.Root, right.Root);
+
+    private static bool SameFolder(FolderNode left, FolderNode? right) =>
+        right is not null
+        && (ReferenceEquals(left, right)
+            || (LocalPathGuard.TryGetFullPath(left.FullPath, out var a)
+                && LocalPathGuard.TryGetFullPath(right.FullPath, out var b)
+                && a.Equals(b, LocalPathGuard.Comparison)));
 
     private static ScanRecord ToRecord(ScanResult result) => new()
     {
@@ -170,7 +197,7 @@ public static class ScanCache
             }
 
             results = parsed;
-            return parsed.Count > 0;
+            return true;
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or NotSupportedException)
         {

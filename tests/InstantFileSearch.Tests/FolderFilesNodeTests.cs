@@ -43,6 +43,9 @@ public class FolderFilesNodeTests
         Assert.Equal(leaf, Assert.Single(onlyDirs.TreeChildren));
         Assert.False(FolderFilesNode.IsScanRoot(rootFiles));
         Assert.True(FolderFilesNode.IsScanRoot(root));
+        Assert.False(FolderFilesNode.IsScanRoot(nested));
+        Assert.False(FolderFilesNode.IsScanRoot(onlyDirs));
+        Assert.False(FolderFilesNode.IsScanRoot(null));
     }
 
     [Fact]

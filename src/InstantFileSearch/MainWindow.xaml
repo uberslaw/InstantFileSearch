@@ -27,7 +27,8 @@
                 <MenuItem Header="_Cancel" Command="{Binding CancelCommand}" InputGestureText="Esc"/>
                 <Separator/>
                 <MenuItem Header="Exclude selected folder" Command="{Binding ExcludeFolderCommand}"/>
-                <MenuItem Header="Remove selected scan" Command="{Binding RemoveScanCommand}"/>
+                <MenuItem Header="Remove from list" Command="{Binding RemoveScanCommand}"
+                          ToolTip="Removes the selected scan from the list. Does not delete files on disk."/>
                 <MenuItem Header="Excluded folders…" Command="{Binding ShowExclusionsCommand}"/>
             </MenuItem>
         </Menu>
@@ -194,7 +195,20 @@
                             <MenuItem Header="Copy name" Command="{Binding CopyNameCommand}" CommandParameter="tree"/>
                             <Separator/>
                             <MenuItem Header="Exclude folder" Command="{Binding ExcludeFolderCommand}" CommandParameter="tree"/>
-                            <MenuItem Header="Remove scan" Command="{Binding RemoveScanCommand}"/>
+                            <MenuItem Header="Remove from list"
+                                      Command="{Binding RemoveScanCommand}"
+                                      ToolTip="Removes this scan from the list. Does not delete files on disk.">
+                                <MenuItem.Style>
+                                    <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <Trigger Property="IsEnabled" Value="True">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </MenuItem.Style>
+                            </MenuItem>
                         </ContextMenu>
                     </TreeView.ContextMenu>
                     <TreeView.ItemTemplate>

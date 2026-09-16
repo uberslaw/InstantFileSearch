@@ -9,9 +9,19 @@ namespace InstantFileSearch;
 public static class ResultsUi
 {
     public const string TreeContext = "tree";
+    public const string RemoveFromListHeader = "Remove from list";
+    public const string RemoveFromListTip =
+        "Removes this scan from the list. Does not delete files on disk.";
 
     public static bool IsTreeContext(object? parameter) =>
         parameter is string text && text.Equals(TreeContext, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Tree context "Remove from list" is only for a scan root. Nested folders
+    /// and FILES must not offer a command that drops the parent location.
+    /// </summary>
+    public static bool ShowRemoveFromList(FolderNode? node, bool isScanning = false) =>
+        !isScanning && FolderFilesNode.IsScanRoot(node);
 
     public static bool ShowEmptyState(int itemCount) => itemCount <= 0;
 

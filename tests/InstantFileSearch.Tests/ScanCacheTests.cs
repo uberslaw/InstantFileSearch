@@ -80,6 +80,74 @@ public class ScanCacheTests
     }
 
     [Fact]
+    public void WithoutRootDropsThatScanFromSetAndCache()
+    {
+        var one = Path.Combine(Path.GetTempPath(), "ifs-rm1-" + Guid.NewGuid().ToString("N"));
+        var two = Path.Combine(Path.GetTempPath(), "ifs-rm2-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(one, "nested"));
+        Directory.CreateDirectory(two);
+        File.WriteAllText(Path.Combine(one, "keep-disk.txt"), "one");
+        File.WriteAllText(Path.Combine(one, "nested", "deep.txt"), "deep");
+        File.WriteAllText(Path.Combine(two, "stay.txt"), "two");
+        var cache = Path.Combine(Path.GetTempPath(), "ifs-rm-" + Guid.NewGuid().ToString("N") + ".bin");
+        var siblingJson = Path.ChangeExtension(cache, ".json");
+
+        try
+        {
+            var first = new FileScanner().Scan(one);
+            var second = new FileScanner().Scan(two);
+            var combined = ScanCache.Upsert(ScanCache.Upsert([], first), second);
+            Assert.Equal(2, combined.Count);
+
+            var filesNode = first.Root.TreeChildren.Single(node => node.IsFilesNode);
+            var nested = first.Root.Folders.Single(node => node.Name == "nested");
+            Assert.Equal(combined, ScanCache.WithoutRoot(combined, filesNode));
+            Assert.Equal(combined, ScanCache.WithoutRoot(combined, nested));
+            Assert.False(ResultsUi.ShowRemoveFromList(filesNode));
+            Assert.False(ResultsUi.ShowRemoveFromList(nested));
+            Assert.True(ResultsUi.ShowRemoveFromList(first.Root));
+
+            var remaining = ScanCache.WithoutRoot(combined, first.Root);
+            Assert.Single(remaining);
+            Assert.Equal(second.Root.FullPath, remaining[0].Root.FullPath);
+            Assert.DoesNotContain(
+                FileNameSearch.Filter(remaining.SelectMany(scan => scan.AllFiles), "keep-disk.txt"),
+                file => file.Name == "keep-disk.txt");
+            Assert.Contains(
+                FileNameSearch.Filter(remaining.SelectMany(scan => scan.AllFiles), "stay.txt"),
+                file => file.Name == "stay.txt");
+            Assert.True(File.Exists(Path.Combine(one, "keep-disk.txt")));
+
+            ScanCache.SaveAll(combined, siblingJson, new PassThroughByteProtector());
+            ScanCache.SaveAll(remaining, cache, new PassThroughByteProtector());
+            Assert.True(ScanCache.TryLoadAll(cache, out var loaded, new PassThroughByteProtector()));
+            Assert.Single(loaded);
+            Assert.Equal(second.Root.FullPath, loaded[0].Root.FullPath);
+
+            var empty = ScanCache.WithoutRoot(remaining, second.Root);
+            Assert.Empty(empty);
+            ScanCache.SaveAll(empty, cache, new PassThroughByteProtector());
+            Assert.False(ScanCache.TryLoadAll(cache, out var afterEmpty, new PassThroughByteProtector()));
+            Assert.Empty(afterEmpty);
+            Assert.True(File.Exists(Path.Combine(two, "stay.txt")));
+        }
+        finally
+        {
+            Directory.Delete(one, recursive: true);
+            Directory.Delete(two, recursive: true);
+            if (File.Exists(cache))
+            {
+                File.Delete(cache);
+            }
+
+            if (File.Exists(siblingJson))
+            {
+                File.Delete(siblingJson);
+            }
+        }
+    }
+
+    [Fact]
     public void TryLoadMissingOrCorruptReturnsFalse()
     {
         Assert.False(ScanCache.TryLoad(Path.Combine(Path.GetTempPath(), "ifs-nope-" + Guid.NewGuid().ToString("N") + ".json"), out _));

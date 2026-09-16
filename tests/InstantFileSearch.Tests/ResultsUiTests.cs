@@ -37,6 +37,32 @@ public class ResultsUiTests
     }
 
     [Fact]
+    public void RemoveFromListIsOnlyForScanRoots()
+    {
+        Assert.Equal("Remove from list", ResultsUi.RemoveFromListHeader);
+        Assert.Contains("Does not delete files", ResultsUi.RemoveFromListTip, StringComparison.Ordinal);
+
+        var root = new FolderNode { Name = "work (this PC)", FullPath = @"C:\work" };
+        var nested = new FolderNode { Name = "src", FullPath = @"C:\work\src", Parent = root };
+        var files = new FolderNode
+        {
+            Name = FolderFilesNode.DisplayName,
+            FullPath = @"C:\work",
+            Parent = root,
+            IsFilesNode = true,
+        };
+
+        Assert.True(ResultsUi.ShowRemoveFromList(root));
+        Assert.False(ResultsUi.ShowRemoveFromList(root, isScanning: true));
+        Assert.False(ResultsUi.ShowRemoveFromList(nested));
+        Assert.False(ResultsUi.ShowRemoveFromList(files));
+        Assert.False(ResultsUi.ShowRemoveFromList(null));
+        Assert.False(FolderFilesNode.IsScanRoot(nested));
+        Assert.False(FolderFilesNode.IsScanRoot(files));
+        Assert.True(FolderFilesNode.IsScanRoot(root));
+    }
+
+    [Fact]
     public void TreeContextCopyIgnoresGridSelection()
     {
         Assert.True(ResultsUi.IsTreeContext("tree"));
