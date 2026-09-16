@@ -52,6 +52,7 @@ public sealed class FileScanner
             location);
 
         SortTree(root);
+        FolderFilesNode.Attach(root);
         clock.Stop();
         root.ScanDuration = clock.Elapsed;
         root.LocationKind = location;

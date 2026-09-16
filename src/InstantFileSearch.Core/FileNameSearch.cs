@@ -99,7 +99,26 @@ public static class FileNameSearch
         return true;
     }
 
-    private static bool MatchesFolder(FileEntry file, SearchQuery query) =>
-        query.UnderFolder is null
-        || LocalPathGuard.IsSameOrUnder(file.FullPath, query.UnderFolder);
+    private static bool MatchesFolder(FileEntry file, SearchQuery query)
+    {
+        if (query.UnderFolder is null)
+        {
+            return true;
+        }
+
+        if (!LocalPathGuard.IsSameOrUnder(file.FullPath, query.UnderFolder))
+        {
+            return false;
+        }
+
+        if (!query.DirectChildrenOnly)
+        {
+            return true;
+        }
+
+        return file.Parent is not null
+            && LocalPathGuard.TryGetFullPath(file.Parent.FullPath, out var parent)
+            && LocalPathGuard.TryGetFullPath(query.UnderFolder, out var under)
+            && parent.Equals(under, LocalPathGuard.Comparison);
+    }
 }

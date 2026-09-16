@@ -17,6 +17,12 @@ public sealed class SearchQuery
     public DateTime? ModifiedFrom { get; init; }
     public DateTime? ModifiedTo { get; init; }
     public string? UnderFolder { get; init; }
+    /// <summary>
+    /// When set with <see cref="UnderFolder"/>, only files sitting directly in
+    /// that folder match — not files in subfolders. Used when the FILES node
+    /// is selected with Selected-folder scope.
+    /// </summary>
+    public bool DirectChildrenOnly { get; init; }
     public SearchMatchMode Match { get; init; } = SearchMatchMode.NameOrPath;
 
     public bool HasCriteria =>

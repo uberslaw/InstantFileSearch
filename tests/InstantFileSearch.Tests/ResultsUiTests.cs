@@ -11,6 +11,7 @@ public class ResultsUiTests
         Assert.False(ResultsUi.ShowEmptyState(1));
         Assert.Equal("Scan a folder to list files here.", ResultsUi.EmptyState(hasScans: false, isSearchActive: false, itemCount: 0));
         Assert.Equal("This folder is empty.", ResultsUi.EmptyState(hasScans: true, isSearchActive: false, itemCount: 0));
+        Assert.Equal("No files at this level.", ResultsUi.EmptyState(hasScans: true, isSearchActive: false, itemCount: 0, filesAtLevel: true));
         Assert.Equal("No files match this search.", ResultsUi.EmptyState(hasScans: true, isSearchActive: true, itemCount: 0));
         Assert.Equal("", ResultsUi.EmptyState(hasScans: true, isSearchActive: true, itemCount: 3));
     }
@@ -21,6 +22,8 @@ public class ResultsUiTests
         Assert.Equal("CONTENTS", ResultsUi.ContentsHeader(hasScans: false, isSearchActive: false, itemCount: 0));
         Assert.Equal("CONTENTS · 1 item", ResultsUi.ContentsHeader(hasScans: true, isSearchActive: false, itemCount: 1));
         Assert.Equal("CONTENTS · 12 items", ResultsUi.ContentsHeader(hasScans: true, isSearchActive: false, itemCount: 12));
+        Assert.Equal("Files in work · 1 file", ResultsUi.ContentsHeader(true, false, 1, filesAtLevel: true, folderName: "work"));
+        Assert.Equal("Files in this folder · 3 files", ResultsUi.ContentsHeader(true, false, 3, filesAtLevel: true, folderName: null));
         Assert.Equal("RESULTS · 1 file", ResultsUi.ContentsHeader(hasScans: true, isSearchActive: true, itemCount: 1));
         Assert.Equal("RESULTS · 0 files", ResultsUi.ContentsHeader(hasScans: true, isSearchActive: true, itemCount: 0));
     }
@@ -29,6 +32,7 @@ public class ResultsUiTests
     public void DetailsMetaOmitsMissingDates()
     {
         Assert.Equal("File  ·  512 B", ResultsUi.DetailsMeta(512, DateTime.MinValue, isFolder: false));
+        Assert.Equal("Files  ·  512 B", ResultsUi.DetailsMeta(512, DateTime.MinValue, isFolder: true, isFilesNode: true));
         Assert.Equal("Folder  ·  1.00 KB  ·  2024-02-03 04:05", ResultsUi.DetailsMeta(1024, new DateTime(2024, 2, 3, 4, 5, 0), isFolder: true));
     }
 
@@ -64,6 +68,10 @@ public class ResultsUiTests
         Assert.Equal("\uE7F4", ResultsUi.FolderGlyph(isRoot: true, ScanLocationKind.Local));
         Assert.Equal("\uE83B", ResultsUi.FolderGlyph(isRoot: true, ScanLocationKind.Network));
         Assert.Equal("\uE8B7", ResultsUi.FolderGlyph(isRoot: false, ScanLocationKind.Network));
+        Assert.Equal("\uE8C8", ResultsUi.FolderGlyph(isRoot: false, ScanLocationKind.Local, isFilesNode: true));
+        Assert.Equal("\uE8C8", ResultsUi.FilesGlyph());
+        Assert.NotEqual(ResultsUi.FilesGlyph(), ResultsUi.FolderGlyph(isRoot: false, ScanLocationKind.Local));
+        Assert.NotEqual(ResultsUi.FilesGlyph(), ResultsUi.FolderGlyph(isRoot: true, ScanLocationKind.Local));
         Assert.Equal("\uE8B7", ResultsUi.FileGlyph(isFolder: true));
         Assert.Equal("\uE7C3", ResultsUi.FileGlyph(isFolder: false));
     }
@@ -88,5 +96,8 @@ public class ResultsUiTests
         Assert.Equal("\uE7F4", root.Glyph);
         Assert.Equal("<1%", child.PercentText);
         Assert.Equal("\uE8B7", child.Glyph);
+        var files = new FolderNode { Name = "FILES", FullPath = @"C:\work", Parent = root, Size = 4, IsFilesNode = true };
+        Assert.Equal(ResultsUi.FilesGlyph(), files.Glyph);
+        Assert.Equal("<1%", files.PercentText);
     }
 }

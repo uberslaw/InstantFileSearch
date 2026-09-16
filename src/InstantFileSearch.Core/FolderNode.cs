@@ -12,6 +12,11 @@ public sealed class FolderNode : INotifyPropertyChanged
     public required string FullPath { get; init; }
     public FolderNode? Parent { get; set; }
     public List<FolderNode> Folders { get; } = [];
+    /// <summary>
+    /// Tree rows under this folder: real subfolders plus a synthetic FILES node
+    /// when this folder has direct files. Not persisted; rebuilt after scan/load.
+    /// </summary>
+    public List<FolderNode> TreeChildren { get; } = [];
     public List<FileEntry> Files { get; } = [];
     public long Size { get; set; }
     public int FileCount { get; set; }
@@ -19,6 +24,11 @@ public sealed class FolderNode : INotifyPropertyChanged
     public DateTime Modified { get; set; }
     public ScanLocationKind LocationKind { get; set; }
     public TimeSpan ScanDuration { get; set; }
+    /// <summary>
+    /// Synthetic child that represents files sitting directly in the parent
+    /// folder. Not a real path, scan root, or exclusion target.
+    /// </summary>
+    public bool IsFilesNode { get; init; }
 
     public string DurationText =>
         Parent is null && ScanDuration > TimeSpan.Zero
@@ -32,7 +42,7 @@ public sealed class FolderNode : INotifyPropertyChanged
 
     public string PercentText => ResultsUi.FormatPercent(PercentOfParent, isRoot: Parent is null);
 
-    public string Glyph => ResultsUi.FolderGlyph(isRoot: Parent is null, LocationKind);
+    public string Glyph => ResultsUi.FolderGlyph(isRoot: Parent is null, LocationKind, IsFilesNode);
 
     public bool IsExpanded
     {

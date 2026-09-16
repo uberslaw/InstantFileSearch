@@ -198,7 +198,7 @@
                         </ContextMenu>
                     </TreeView.ContextMenu>
                     <TreeView.ItemTemplate>
-                        <HierarchicalDataTemplate ItemsSource="{Binding Folders}">
+                        <HierarchicalDataTemplate ItemsSource="{Binding TreeChildren}">
                             <Grid Margin="0,1">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>

@@ -153,6 +153,7 @@ public static class ScanCache
 
                 var files = new List<FileEntry>();
                 var root = ToFolder(record.Root, parent: null, files);
+                FolderFilesNode.Attach(root);
                 if (root.ScanDuration <= TimeSpan.Zero && record.DurationSeconds > 0)
                 {
                     root.ScanDuration = TimeSpan.FromSeconds(record.DurationSeconds);
@@ -187,7 +188,7 @@ public static class ScanCache
         Modified = node.Modified,
         LocationKind = node.LocationKind.ToString(),
         ScanDurationSeconds = node.ScanDuration.TotalSeconds,
-        Folders = node.Folders.Select(FromFolder).ToList(),
+        Folders = node.Folders.Where(child => !child.IsFilesNode).Select(FromFolder).ToList(),
         Files = node.Files.Select(FromFile).ToList(),
     };
 

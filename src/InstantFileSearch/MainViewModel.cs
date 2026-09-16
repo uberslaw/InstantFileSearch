@@ -349,11 +349,20 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    public string EmptyStateText => ResultsUi.EmptyState(_scans.Count > 0, IsSearchActive, Items.Count);
+    public string EmptyStateText => ResultsUi.EmptyState(
+        _scans.Count > 0,
+        IsSearchActive,
+        Items.Count,
+        filesAtLevel: SelectedFolder?.IsFilesNode == true);
 
     public bool IsEmptyStateVisible => ResultsUi.ShowEmptyState(Items.Count);
 
-    public string ContentsHeaderText => ResultsUi.ContentsHeader(_scans.Count > 0, IsSearchActive, Items.Count);
+    public string ContentsHeaderText => ResultsUi.ContentsHeader(
+        _scans.Count > 0,
+        IsSearchActive,
+        Items.Count,
+        filesAtLevel: SelectedFolder?.IsFilesNode == true,
+        folderName: SelectedFolder is null ? null : FolderFilesNode.OwnerName(SelectedFolder));
 
     public string SelectedDetailsPath => SelectedEntry?.FullPath ?? SelectedFolder?.FullPath ?? "";
 
@@ -368,7 +377,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
             if (SelectedFolder is not null)
             {
-                return ResultsUi.DetailsMeta(SelectedFolder.Size, SelectedFolder.Modified, isFolder: true);
+                return ResultsUi.DetailsMeta(
+                    SelectedFolder.Size,
+                    SelectedFolder.Modified,
+                    isFolder: !SelectedFolder.IsFilesNode,
+                    isFilesNode: SelectedFolder.IsFilesNode);
             }
 
             return "";
@@ -598,17 +611,23 @@ public sealed class MainViewModel : INotifyPropertyChanged
             return false;
         }
 
-        if (SelectedEntry is { IsFolder: true, Folder.Parent: not null })
+        if (SelectedEntry is { IsFolder: true, Folder: not null })
         {
-            return true;
+            return FolderFilesNode.CanExclude(SelectedEntry.Folder);
         }
 
-        return SelectedFolder?.Parent is not null;
+        return FolderFilesNode.CanExclude(SelectedFolder);
     }
 
     public void ExcludeSelectedFolder(object? parameter)
     {
         var node = TargetFolder(parameter);
+        if (node?.IsFilesNode == true)
+        {
+            StatusText = "FILES is not a folder you can exclude.";
+            return;
+        }
+
         if (node?.Parent is null)
         {
             StatusText = "The scan root cannot be excluded.";
@@ -669,6 +688,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         var parent = node.Parent;
         parent.Folders.Remove(node);
+        FolderFilesNode.Attach(scan.Root);
         for (var walk = parent; walk is not null; walk = walk.Parent)
         {
             walk.Size = Math.Max(0, walk.Size - node.Size);
@@ -819,11 +839,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     private bool CanRemoveSelectedScan() =>
-        !IsScanning && SelectedFolder is { Parent: null } && FindScan(SelectedFolder) is not null;
+        !IsScanning && FolderFilesNode.IsScanRoot(SelectedFolder) && FindScan(SelectedFolder) is not null;
 
     public void RemoveSelectedScan()
     {
-        if (SelectedFolder is not { Parent: null } || FindScan(SelectedFolder) is not { } scan)
+        if (!FolderFilesNode.IsScanRoot(SelectedFolder) || FindScan(SelectedFolder) is not { } scan)
         {
             return;
         }
@@ -897,6 +917,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ModifiedFrom = SearchQuery.ParseDate(ModifiedFromText),
         ModifiedTo = SearchQuery.ParseDate(ModifiedToText),
         UnderFolder = IsSelectedFolderScope ? SelectedFolder?.FullPath ?? "" : null,
+        DirectChildrenOnly = IsSelectedFolderScope && SelectedFolder?.IsFilesNode == true,
         Match = MatchMode switch
         {
             "Name" => SearchMatchMode.Name,
@@ -930,7 +951,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
         try
         {
             await Task.Delay(SearchDebounce, token);
-            var files = _scans.SelectMany(scan => scan.AllFiles).ToList();
+            var files = FolderFilesNode.FilesForSearch(
+                    _scans.SelectMany(scan => scan.AllFiles),
+                    SelectedFolder,
+                    IsSelectedFolderScope)
+                .ToList();
             if (files.Count == 0 || generation != _searchGeneration)
             {
                 return;
@@ -980,8 +1005,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
 
         var parentSize = SelectedFolder.Size;
-        var rows = new List<EntryRow>(SelectedFolder.Folders.Count + SelectedFolder.Files.Count);
-        foreach (var folder in SelectedFolder.Folders)
+        var folders = FolderFilesNode.ContentFolders(SelectedFolder);
+        var files = FolderFilesNode.ContentFiles(SelectedFolder);
+        var rows = new List<EntryRow>(folders.Count + files.Count);
+        foreach (var folder in folders)
         {
             rows.Add(new EntryRow
             {
@@ -996,7 +1023,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             });
         }
 
-        foreach (var file in SelectedFolder.Files)
+        foreach (var file in files)
         {
             rows.Add(ToFileRow(file, parentSize));
         }
@@ -1005,7 +1032,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         if (_scans.Count > 0 && !IsScanning && !IsSearchActive)
         {
-            StatusText = $"{SelectedFolder.Folders.Count:N0} folders, {SelectedFolder.Files.Count:N0} files in {SelectedFolder.Name}";
+            StatusText = SelectedFolder.IsFilesNode
+                ? $"{files.Count:N0} files in {FolderFilesNode.OwnerName(SelectedFolder)}"
+                : $"{folders.Count:N0} folders, {files.Count:N0} files in {SelectedFolder.Name}";
         }
     }
 

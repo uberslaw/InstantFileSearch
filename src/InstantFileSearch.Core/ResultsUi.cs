@@ -15,7 +15,7 @@ public static class ResultsUi
 
     public static bool ShowEmptyState(int itemCount) => itemCount <= 0;
 
-    public static string EmptyState(bool hasScans, bool isSearchActive, int itemCount)
+    public static string EmptyState(bool hasScans, bool isSearchActive, int itemCount, bool filesAtLevel = false)
     {
         if (itemCount > 0)
         {
@@ -32,10 +32,23 @@ public static class ResultsUi
             return "No files match this search.";
         }
 
+        if (filesAtLevel)
+        {
+            return "No files at this level.";
+        }
+
         return "This folder is empty.";
     }
 
-    public static string ContentsHeader(bool hasScans, bool isSearchActive, int itemCount)
+    public static string ContentsHeader(bool hasScans, bool isSearchActive, int itemCount) =>
+        ContentsHeader(hasScans, isSearchActive, itemCount, filesAtLevel: false, folderName: null);
+
+    public static string ContentsHeader(
+        bool hasScans,
+        bool isSearchActive,
+        int itemCount,
+        bool filesAtLevel,
+        string? folderName)
     {
         if (!hasScans)
         {
@@ -49,14 +62,22 @@ public static class ResultsUi
                 : $"RESULTS · {itemCount.ToString("N0", CultureInfo.InvariantCulture)} files";
         }
 
+        if (filesAtLevel)
+        {
+            var where = string.IsNullOrWhiteSpace(folderName) ? "this folder" : folderName;
+            return itemCount == 1
+                ? $"Files in {where} · 1 file"
+                : $"Files in {where} · {itemCount.ToString("N0", CultureInfo.InvariantCulture)} files";
+        }
+
         return itemCount == 1
             ? "CONTENTS · 1 item"
             : $"CONTENTS · {itemCount.ToString("N0", CultureInfo.InvariantCulture)} items";
     }
 
-    public static string DetailsMeta(long size, DateTime modified, bool isFolder)
+    public static string DetailsMeta(long size, DateTime modified, bool isFolder, bool isFilesNode = false)
     {
-        var kind = isFolder ? "Folder" : "File";
+        var kind = isFilesNode ? "Files" : isFolder ? "Folder" : "File";
         var sizeText = ByteFormatter.ToString(size);
         if (modified == default || modified == DateTime.MinValue)
         {
@@ -92,8 +113,13 @@ public static class ResultsUi
         return Math.Min(100, percent).ToString("0", CultureInfo.InvariantCulture) + "%";
     }
 
-    public static string FolderGlyph(bool isRoot, ScanLocationKind kind)
+    public static string FolderGlyph(bool isRoot, ScanLocationKind kind, bool isFilesNode = false)
     {
+        if (isFilesNode)
+        {
+            return FilesGlyph();
+        }
+
         if (!isRoot)
         {
             return "\uE8B7";
@@ -101,6 +127,9 @@ public static class ResultsUi
 
         return kind == ScanLocationKind.Network ? "\uE83B" : "\uE7F4";
     }
+
+    /// <summary>Segoe MDL2 Copy — stacked pages, distinct from folder and drive.</summary>
+    public static string FilesGlyph() => "\uE8C8";
 
     public static string FileGlyph(bool isFolder) => isFolder ? "\uE8B7" : "\uE7C3";
 
