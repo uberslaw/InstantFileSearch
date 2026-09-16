@@ -8,36 +8,44 @@
         <local:ByteSizeConverter x:Key="ByteSize"/>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
 
-        <SolidColorBrush x:Key="BgBrush" Color="#1B1D21"/>
-        <SolidColorBrush x:Key="PanelBrush" Color="#24262B"/>
-        <SolidColorBrush x:Key="PanelAltBrush" Color="#2A2D33"/>
-        <SolidColorBrush x:Key="BorderBrush" Color="#3A3D44"/>
-        <SolidColorBrush x:Key="TextBrush" Color="#E8EAED"/>
-        <SolidColorBrush x:Key="MutedBrush" Color="#9AA0A6"/>
-        <SolidColorBrush x:Key="AccentBrush" Color="#3D8BFF"/>
-        <SolidColorBrush x:Key="BarTrackBrush" Color="#2C2F36"/>
-        <SolidColorBrush x:Key="BarFillBrush" Color="#3D8BFF"/>
-        <SolidColorBrush x:Key="ButtonBrush" Color="#2F333A"/>
-        <SolidColorBrush x:Key="ButtonHoverBrush" Color="#3A3F48"/>
-        <SolidColorBrush x:Key="DangerBrush" Color="#C75050"/>
-        <SolidColorBrush x:Key="DangerSoftBrush" Color="#E8A0A0"/>
-        <SolidColorBrush x:Key="SelectionBrush" Color="#1A3A66"/>
-        <SolidColorBrush x:Key="ToolbarBgBrush" Color="#16181C"/>
-        <SolidColorBrush x:Key="FileGlyphBrush" Color="#C5CAD1"/>
+        <!-- Light pastel-blue theme (only theme). Surfaces: sky #E8F1FA, powder chrome #DCEAF6, white-blue panels #F7FBFE. -->
+        <SolidColorBrush x:Key="BgBrush" Color="#E8F1FA"/>
+        <SolidColorBrush x:Key="PanelBrush" Color="#F7FBFE"/>
+        <SolidColorBrush x:Key="PanelAltBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="BorderBrush" Color="#B4C9DC"/>
+        <SolidColorBrush x:Key="TextBrush" Color="#2C3E50"/>
+        <SolidColorBrush x:Key="MutedBrush" Color="#4A6278"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#2F73C4"/>
+        <SolidColorBrush x:Key="BarTrackBrush" Color="#C5D8EA"/>
+        <SolidColorBrush x:Key="BarFillBrush" Color="#2F73C4"/>
+        <SolidColorBrush x:Key="ButtonBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="ButtonHoverBrush" Color="#D4E6F5"/>
+        <SolidColorBrush x:Key="HoverBrush" Color="#D4E6F5"/>
+        <SolidColorBrush x:Key="HoverBorderBrush" Color="#7EA4C9"/>
+        <SolidColorBrush x:Key="DangerBrush" Color="#B03A3A"/>
+        <SolidColorBrush x:Key="DangerSoftBrush" Color="#B03A3A"/>
+        <SolidColorBrush x:Key="SelectionBrush" Color="#BFD9F2"/>
+        <SolidColorBrush x:Key="SelectionTextBrush" Color="#1E3A5F"/>
+        <SolidColorBrush x:Key="ToolbarBgBrush" Color="#DCEAF6"/>
+        <SolidColorBrush x:Key="FileGlyphBrush" Color="#5E738A"/>
+        <SolidColorBrush x:Key="GridLineBrush" Color="#D3E2EF"/>
+        <SolidColorBrush x:Key="HeaderBrush" Color="#E1EEF7"/>
+        <SolidColorBrush x:Key="InactiveSelectionBrush" Color="#D7E6F4"/>
 
-        <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="#1B1D21"/>
-        <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="#E8EAED"/>
-        <SolidColorBrush x:Key="{x:Static SystemColors.ControlBrushKey}" Color="#2A2D33"/>
-        <SolidColorBrush x:Key="{x:Static SystemColors.ControlTextBrushKey}" Color="#E8EAED"/>
-        <SolidColorBrush x:Key="{x:Static SystemColors.ControlDarkBrushKey}" Color="#3A3D44"/>
-        <SolidColorBrush x:Key="{x:Static SystemColors.GrayTextBrushKey}" Color="#9AA0A6"/>
-        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#1A3A66"/>
-        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#FFFFFF"/>
-        <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#2A3F5C"/>
-        <SolidColorBrush x:Key="{x:Static SystemColors.MenuBrushKey}" Color="#2A2D33"/>
-        <SolidColorBrush x:Key="{x:Static SystemColors.MenuBarBrushKey}" Color="#16181C"/>
-        <SolidColorBrush x:Key="{x:Static SystemColors.MenuTextBrushKey}" Color="#E8EAED"/>
-        <SolidColorBrush x:Key="{x:Static SystemColors.MenuHighlightBrushKey}" Color="#1A3A66"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="#E8F1FA"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="#2C3E50"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.ControlBrushKey}" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.ControlTextBrushKey}" Color="#2C3E50"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.ControlDarkBrushKey}" Color="#B4C9DC"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.GrayTextBrushKey}" Color="#4A6278"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#BFD9F2"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#1E3A5F"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#D7E6F4"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="#2C3E50"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.MenuBrushKey}" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.MenuBarBrushKey}" Color="#DCEAF6"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.MenuTextBrushKey}" Color="#2C3E50"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.MenuHighlightBrushKey}" Color="#BFD9F2"/>
 
         <Style TargetType="Window">
             <Setter Property="Background" Value="{StaticResource BgBrush}"/>
@@ -190,7 +198,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="BorderBrush" Value="#5A6270"/>
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource HoverBorderBrush}"/>
                             </Trigger>
                             <Trigger Property="IsFocused" Value="True">
                                 <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
@@ -271,7 +279,13 @@
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.45"/>
                             </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="BorderBrush" Value="{StaticResource HoverBorderBrush}"/>
+                            </Trigger>
                             <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsDropDownOpen" Value="True">
                                 <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -297,9 +311,11 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True">
                                 <Setter TargetName="bd" Property="Background" Value="{StaticResource SelectionBrush}"/>
+                                <Setter Property="Foreground" Value="{StaticResource SelectionTextBrush}"/>
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="bd" Property="Background" Value="{StaticResource SelectionBrush}"/>
+                                <Setter Property="Foreground" Value="{StaticResource SelectionTextBrush}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.45"/>
@@ -393,13 +409,14 @@
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="{StaticResource SelectionBrush}"/>
+                                <Setter Property="Foreground" Value="{StaticResource SelectionTextBrush}"/>
                             </Trigger>
                             <MultiTrigger>
                                 <MultiTrigger.Conditions>
                                     <Condition Property="IsSelected" Value="False"/>
                                     <Condition Property="IsMouseOver" Value="True"/>
                                 </MultiTrigger.Conditions>
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource PanelAltBrush}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverBrush}"/>
                             </MultiTrigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.45"/>
@@ -416,7 +433,7 @@
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="RowBackground" Value="{StaticResource PanelBrush}"/>
             <Setter Property="AlternatingRowBackground" Value="{StaticResource PanelAltBrush}"/>
-            <Setter Property="HorizontalGridLinesBrush" Value="#2E3238"/>
+            <Setter Property="HorizontalGridLinesBrush" Value="{StaticResource GridLineBrush}"/>
             <Setter Property="VerticalGridLinesBrush" Value="Transparent"/>
             <Setter Property="HeadersVisibility" Value="Column"/>
             <Setter Property="GridLinesVisibility" Value="Horizontal"/>
@@ -433,7 +450,7 @@
         </Style>
 
         <Style TargetType="DataGridColumnHeader">
-            <Setter Property="Background" Value="#2C2F36"/>
+            <Setter Property="Background" Value="{StaticResource HeaderBrush}"/>
             <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
             <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="0,0,1,1"/>
@@ -452,7 +469,7 @@
             <Style.Triggers>
                 <Trigger Property="IsSelected" Value="True">
                     <Setter Property="Background" Value="Transparent"/>
-                    <Setter Property="Foreground" Value="White"/>
+                    <Setter Property="Foreground" Value="{StaticResource SelectionTextBrush}"/>
                     <Setter Property="BorderBrush" Value="Transparent"/>
                 </Trigger>
             </Style.Triggers>
@@ -466,11 +483,11 @@
                     <Setter Property="FontWeight" Value="SemiBold"/>
                 </DataTrigger>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#2E3540"/>
+                    <Setter Property="Background" Value="{StaticResource HoverBrush}"/>
                 </Trigger>
                 <Trigger Property="IsSelected" Value="True">
                     <Setter Property="Background" Value="{StaticResource SelectionBrush}"/>
-                    <Setter Property="Foreground" Value="White"/>
+                    <Setter Property="Foreground" Value="{StaticResource SelectionTextBrush}"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -496,11 +513,12 @@
                             <ContentPresenter/>
                         </Border>
                         <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{StaticResource HoverBrush}"/>
+                            </Trigger>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="bd" Property="Background" Value="{StaticResource SelectionBrush}"/>
-                            </Trigger>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="{StaticResource ButtonHoverBrush}"/>
+                                <Setter Property="Foreground" Value="{StaticResource SelectionTextBrush}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.45"/>
@@ -524,7 +542,7 @@
 
         <Style TargetType="MenuItem">
             <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
-            <Setter Property="Background" Value="{StaticResource ToolbarBgBrush}"/>
+            <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Padding" Value="10,4"/>
         </Style>
 

@@ -281,7 +281,7 @@
                           HorizontalAlignment="Stretch"
                           Background="{StaticResource ToolbarBgBrush}"/>
 
-            <DockPanel Grid.Column="2">
+            <DockPanel Grid.Column="2" Background="{StaticResource PanelBrush}">
                 <TextBlock DockPanel.Dock="Top"
                            Style="{StaticResource PanelCaption}"
                            Text="{Binding ContentsHeaderText}"/>
