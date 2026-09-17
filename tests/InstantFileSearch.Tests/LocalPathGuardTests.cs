@@ -40,6 +40,8 @@ public class LocalPathGuardTests
     {
         Assert.False(LocalPathGuard.TryGetFullPath("\0", out _));
         Assert.False(LocalPathGuard.TryResolveExistingDirectory("\0", out _));
+        Assert.False(LocalPathGuard.TryGetFullPath(@"\\server", out _));
+        Assert.False(LocalPathGuard.TryGetFullPath(@"\\", out _));
     }
 
     [Fact]

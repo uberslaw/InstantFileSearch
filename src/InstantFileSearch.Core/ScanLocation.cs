@@ -17,7 +17,7 @@ public static class ScanLocation
         }
 
         var trimmed = fullPath.Trim();
-        if (trimmed.StartsWith(@"\\", StringComparison.Ordinal) || trimmed.StartsWith("//", StringComparison.Ordinal))
+        if (UncPath.TryNormalize(trimmed, out _))
         {
             return ScanLocationKind.Network;
         }

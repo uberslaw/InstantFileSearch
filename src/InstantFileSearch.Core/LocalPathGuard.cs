@@ -1,8 +1,9 @@
 namespace InstantFileSearch;
 
 /// <summary>
-/// Cheap local-path checks for scan roots and "open this result" actions.
-/// No network, no ACLs — reject empty/invalid paths and stay inside the current scan.
+/// Path checks for scan roots and "open this result" actions.
+/// UNC (<c>\\server\share</c>) is allowed as a real folder syntax; empty/invalid
+/// paths are still rejected. No custom SMB client — Windows connects the share.
 /// </summary>
 public static class LocalPathGuard
 {
@@ -19,10 +20,22 @@ public static class LocalPathGuard
             return false;
         }
 
+        var trimmed = path.Trim();
+        if (UncPath.LooksLikeUnc(trimmed))
+        {
+            if (!UncPath.TryNormalize(trimmed, out var unc))
+            {
+                return false;
+            }
+
+            fullPath = unc;
+            return true;
+        }
+
         try
         {
             var resolved = CanonicalizeFullPath(Path.GetFullPath(NormalizeInput(path)));
-            if (string.IsNullOrWhiteSpace(resolved))
+            if (string.IsNullOrWhiteSpace(resolved) || UncPath.LooksLikeUnc(resolved))
             {
                 return false;
             }
@@ -82,9 +95,10 @@ public static class LocalPathGuard
             return true;
         }
 
-        var prefix = root.EndsWith(Path.DirectorySeparatorChar) || root.EndsWith(Path.AltDirectorySeparatorChar)
+        var sep = UncPath.IsUnc(root) ? '\\' : Path.DirectorySeparatorChar;
+        var prefix = root.EndsWith(sep) || root.EndsWith(Path.AltDirectorySeparatorChar)
             ? root
-            : root + Path.DirectorySeparatorChar;
+            : root + sep;
 
         return candidate.StartsWith(prefix, Comparison);
     }

@@ -4,7 +4,7 @@ Windows disk explorer in the TreeSize mold: scan a folder, see the largest direc
 
 ## What it does
 
-- Scans a drive or folder in the background (reparse points — junctions and symlinks — skipped; access-denied paths ignored)
+- Scans a drive, folder, or **UNC share** (`\\server\share`, `\\10.x.x.x\c$`) in the background (reparse points — junctions and symlinks — skipped; child access-denied paths ignored). Paste UNC in the path box (Browse is a local folder dialog). Admin shares (`C$`, `D$`) typically need **File → Run as administrator** (UAC once — Scan does not prompt). The window title and status show **Administrator** when elevated.
 - Shows a folder tree (default: largest first) with percent-of-parent bars. Each distinct scanned location is a top-level root (`this PC` or `network`) with that scan’s duration. Scanning the same path again replaces that root; different paths accumulate. Right-click a root → **Remove from list** (does not delete files). Each completed scan is appended to `%LocalAppData%\InstantFileSearch\logs\scans.log`.
 - Lists files and subfolders for the selected directory
 - Instant search across the scanned index: files **and folders** (not the synthetic **FILES** row). Default is a case-insensitive **whole-name** match, including the extension (`cmd` does not match `cmd.exe` or `anythingwithcmdinit`). Wildcards: `*` any run of characters, `?` one character (`cmd*`, `*cmd`, `*cmd*`). **Advanced** (collapsed by default) adds size from/to (B–TB, 1024-based), modified from/to (`yyyy-MM-dd`), scope (all scans or the selected folder), and match field:
@@ -15,12 +15,13 @@ Windows disk explorer in the TreeSize mold: scan a folder, see the largest direc
 - Left tree: sort scan roots and each folder’s children **A–Z**, **Z–A**, **Size ↓** (largest first, default), or **Size ↑**. **FILES** sorts with siblings (name `FILES`, or its direct-file size). The choice is saved in `%LocalAppData%\InstantFileSearch\ui-settings.json` (plain JSON, not encrypted). The tree is re-sorted when you change the combo and when a scan completes — not on every file during a scan.
 - Restores the last successful scan from disk on launch (including when it ran); Scan again to refresh.
 - Right-click a folder to exclude it from this view and future scans (`Scan` → Excluded folders… to undo)
-- CLI for scan / search / status / exclude (same encrypted cache as the GUI)
+- CLI for scan / search / status / exclude (same encrypted cache as the GUI). `scan` accepts UNC too.
+- Default **View** mode. **Edit** (toolbar toggle, not saved) lets you right-click a **file** in the results list and delete it after confirmation. Local Windows files go to the Recycle Bin; UNC files are permanently deleted. Folders are not deleted here. Delete is not Exclude and not Remove from list.
 - Open, Show in Explorer, copy path; drag a folder onto the window to scan it
 
 ## Run
 
-Needs **Windows** and the **.NET 8 Desktop Runtime** (or the SDK). No network, no admin, no extra services.
+Needs **Windows** and the **.NET 8 Desktop Runtime** (or the SDK). UNC uses Windows file sharing (no custom SMB client). Elevation is optional and only when you choose **Run as administrator**.
 
 ```powershell
 dotnet test tests/InstantFileSearch.Tests/InstantFileSearch.Tests.csproj
@@ -50,12 +51,13 @@ Linux/macOS can build the same pack (`pwsh -File scripts/PortablePublish.ps1 -De
 
 ## Use
 
-1. Browse or drop a folder
-2. Scan
+1. Browse or drop a folder, or paste a UNC path (`\\SERVER\share`)
+2. Scan (F5). If an admin share is denied, use **Run as administrator** and scan again. A failed scan keeps the last good tree.
 3. Click folders on the left. Use the sort combo (**A–Z**, **Z–A**, **Size ↓**, **Size ↑**) to browse. Right-click → **Show in Explorer** opens that folder (`FILES` opens the parent). Right-click a scan root → **Remove from list** drops that location from the tree and search (files on disk stay).
 4. Type in Search (`Ctrl+F`) for an exact file or folder name, or use `*` / `?` for partial names. Open **Advanced** for size, date, folder scope, and name vs path. Select a folder result to highlight it in the left tree; Open or double-click to show that folder’s contents (clears the search box). Show in Explorer still opens Windows Explorer.
 5. Close and reopen: the last scan and its time come back from `%LocalAppData%\InstantFileSearch`
 6. Right-click a folder → Exclude folder to skip it next time
+7. Stay in **View** unless you need to delete. Switch on **Edit**, right-click a file in the list → **Delete…**, confirm name and path. Next launch is View again.
 
 ## CLI
 
@@ -63,6 +65,7 @@ The GUI is still the right place for the size tree. A console app covers the sam
 
 ```powershell
 dotnet run --project src/InstantFileSearch.Cli -- scan C:\Work
+dotnet run --project src/InstantFileSearch.Cli -- scan \\SERVER\share
 dotnet run --project src/InstantFileSearch.Cli -- search *.log
 dotnet run --project src/InstantFileSearch.Cli -- search cmd.exe
 dotnet run --project src/InstantFileSearch.Cli -- status
@@ -104,6 +107,7 @@ There is no Windows service and no Python/venv UI.
 ## Assumptions
 
 - Runtime: Windows x64, .NET 8 Desktop (or the self-contained publish / portable pack)
-- Network: none
-- Permissions: read access to the folder you scan; no elevation required
+- Network: optional UNC via the Windows redirector (`\\server\share`). No separate credential dialog; CurrentUser DPAPI cache is unchanged if you scan an admin share while elevated as the same user.
+- Permissions: read access to the folder you scan. Admin shares usually need an elevated process. Manifest is `asInvoker` (not requireAdministrator).
+- Edit mode: defaults to View every launch (not stored in `ui-settings.json`). Delete updates the in-memory index and cache after a successful disk delete.
 - Data: the last successful scan is `%LocalAppData%\InstantFileSearch\last-scan.bin`, DPAPI-encrypted for the current Windows user (other local accounts cannot read it). Exclusions are `%LocalAppData%\InstantFileSearch\exclusions.bin`, same protection. Tree sort is `%LocalAppData%\InstantFileSearch\ui-settings.json` (plain JSON). The scan is a snapshot, not a live disk view. Administrators on the same machine can still access a logged-in user's DPAPI data.

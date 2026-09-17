@@ -152,6 +152,41 @@ public class CliHostTests
         }
     }
 
+    [Fact]
+    public void ScanUncShareThatDoesNotExistWritesReadableError()
+    {
+        var cache = Path.Combine(Path.GetTempPath(), "ifs-cli-unc-" + Guid.NewGuid().ToString("N") + ".bin");
+        var exclusions = Path.Combine(Path.GetTempPath(), "ifs-cli-unc-ex-" + Guid.NewGuid().ToString("N") + ".bin");
+        try
+        {
+            Assert.Equal(1, Run(["scan", @"\\10.33.41.9\c$"], cache, exclusions, new PassThroughByteProtector(), out _, out var err));
+            Assert.Contains("not found or not accessible", err, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Usage:", err, StringComparison.Ordinal);
+            Assert.Equal(1, Run(["scan", @"\\server"], cache, exclusions, new PassThroughByteProtector(), out _, out var invalid));
+            Assert.Contains("UNC", invalid, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (File.Exists(cache))
+            {
+                File.Delete(cache);
+            }
+
+            if (File.Exists(exclusions))
+            {
+                File.Delete(exclusions);
+            }
+        }
+    }
+
+    [Fact]
+    public void HelpMentionsUncShares()
+    {
+        var output = new StringWriter();
+        Assert.Equal(0, CliHost.Run(["help"], output, new StringWriter()));
+        Assert.Contains(@"\\server\share", output.ToString(), StringComparison.Ordinal);
+    }
+
     private static int Run(string[] args, string cache, string exclusions, IByteProtector protector, out string stdout, out string stderr)
     {
         var outWriter = new StringWriter();

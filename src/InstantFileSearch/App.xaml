@@ -159,6 +159,17 @@
             </Setter>
         </Style>
 
+        <Style x:Key="EditModeToggle" TargetType="ToggleButton" BasedOn="{StaticResource ToolbarToggle}">
+            <Style.Triggers>
+                <Trigger Property="IsChecked" Value="True">
+                    <Setter Property="Background" Value="#F8E4E4"/>
+                    <Setter Property="BorderBrush" Value="{StaticResource DangerBrush}"/>
+                    <Setter Property="Foreground" Value="{StaticResource DangerBrush}"/>
+                    <Setter Property="FontWeight" Value="SemiBold"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
         <Style TargetType="TextBox">
             <Setter Property="Background" Value="{StaticResource PanelAltBrush}"/>
             <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>

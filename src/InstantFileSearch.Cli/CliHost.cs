@@ -48,15 +48,32 @@ public static class CliHost
         string exclusionsPath,
         IByteProtector protector)
     {
-        if (args.Length == 0 || !LocalPathGuard.TryResolveExistingDirectory(args[0], out var path))
+        if (args.Length == 0)
         {
             error.WriteLine("Usage: InstantFileSearch.Cli scan <folder>");
             return 1;
         }
 
+        if (!LocalPathGuard.TryGetFullPath(args[0], out var path))
+        {
+            error.WriteLine(UncPath.LooksLikeUnc(args[0])
+                ? "That is not a usable UNC folder. Use \\\\server\\share or \\\\10.x.x.x\\share."
+                : "The folder path is invalid.");
+            return 1;
+        }
+
         var exclusions = ExclusionStore.Load(exclusionsPath, protector);
         ScanCache.TryLoadAll(cachePath, out var existing, protector);
-        var result = new FileScanner().Scan(path, excludeDirectories: exclusions.Items);
+        ScanResult result;
+        try
+        {
+            result = new FileScanner().Scan(path, excludeDirectories: exclusions.Items);
+        }
+        catch (Exception ex) when (ex is DirectoryNotFoundException or UnauthorizedAccessException)
+        {
+            error.WriteLine(ex.Message);
+            return 1;
+        }
         var all = ScanCache.Upsert(existing, result);
         ScanCache.SaveAll(all, cachePath, protector);
         try
@@ -220,7 +237,7 @@ public static class CliHost
     private static void WriteHelp(TextWriter output)
     {
         output.WriteLine("Instant File Search CLI");
-        output.WriteLine("  scan <folder>              Scan and save an encrypted cache");
+        output.WriteLine("  scan <folder>              Scan a local folder or UNC share (\\\\server\\share)");
         output.WriteLine("  search <query>             Exact name (files and folders), or * ? wildcards");
         output.WriteLine("  status                     Last scan time, size, exclusions");
         output.WriteLine("  exclude add|list|remove    Skip folders on future scans");

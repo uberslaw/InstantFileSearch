@@ -113,6 +113,21 @@ public class FileScannerTests
     }
 
     [Fact]
+    public void ScanMissingUncShareThrowsReadableDirectoryNotFound()
+    {
+        var error = Assert.Throws<DirectoryNotFoundException>(() =>
+            new FileScanner().Scan(@"\\10.33.41.9\c$"));
+        Assert.Contains("not found or not accessible", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(@"\\10.33.41.9\c$", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ScanIncompleteUncThrowsInvalidPath()
+    {
+        Assert.Throws<ArgumentException>(() => new FileScanner().Scan(@"\\server"));
+    }
+
+    [Fact]
     public void ScanHonorsCancellation()
     {
         var root = Path.Combine(Path.GetTempPath(), "ifs-cancel-" + Guid.NewGuid().ToString("N"));

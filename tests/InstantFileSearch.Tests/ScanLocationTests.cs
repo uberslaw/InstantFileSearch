@@ -8,6 +8,10 @@ public class ScanLocationTests
     public void UncPathsAreNetwork()
     {
         Assert.Equal(ScanLocationKind.Network, ScanLocation.Classify(@"\\fileserver\share\docs"));
+        Assert.Equal(ScanLocationKind.Network, ScanLocation.Classify(@"\\10.33.41.9\c$"));
+        Assert.Equal(ScanLocationKind.Network, ScanLocation.Classify(@"\\SERVER\c$\Windows"));
+        Assert.Equal("network", ScanLocation.KindLabel(ScanLocationKind.Network));
+        Assert.Contains("(network)", ScanLocation.DisplayName(@"\\fileserver\share\docs", ScanLocationKind.Network), StringComparison.Ordinal);
         Assert.Equal("network", ScanLocation.KindLabel(ScanLocationKind.Network));
         Assert.Contains("(network)", ScanLocation.DisplayName(@"\\fileserver\share\docs", ScanLocationKind.Network), StringComparison.Ordinal);
     }

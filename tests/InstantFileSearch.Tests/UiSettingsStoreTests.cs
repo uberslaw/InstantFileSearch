@@ -30,4 +30,12 @@ public class UiSettingsStoreTests
             }
         }
     }
+
+    [Fact]
+    public void SettingsDoNotPersistEditMode()
+    {
+        Assert.Null(typeof(UiSettings).GetProperty("IsEditMode"));
+        Assert.Null(typeof(UiSettings).GetProperty("EditMode"));
+        Assert.Null(typeof(UiSettings).GetProperty("InteractionMode"));
+    }
 }

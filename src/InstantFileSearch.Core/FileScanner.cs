@@ -28,11 +28,6 @@ public sealed class FileScanner
             throw new ArgumentException("The folder path is invalid.", nameof(rootPath));
         }
 
-        if (!Directory.Exists(fullRoot))
-        {
-            throw new DirectoryNotFoundException($"Folder not found: {fullRoot}");
-        }
-
         var exclusions = FolderExclusionSet.From(excludeDirectories);
         var location = ScanLocation.Classify(fullRoot);
         var clock = Stopwatch.StartNew();
@@ -101,70 +96,95 @@ public sealed class FileScanner
         }
         catch (Exception ex) when (IsSkippable(ex))
         {
-            errorCount++;
-            return node;
+            return SkipOrThrowRoot(ex, parent, directory.FullName, node, ref errorCount);
         }
 
-        foreach (var entry in entries)
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            try
+            foreach (var entry in entries)
             {
-                if (entry is FileInfo file)
+                cancellationToken.ThrowIfCancellationRequested();
+
+                try
                 {
-                    var item = new FileEntry
+                    if (entry is FileInfo file)
                     {
-                        Name = file.Name,
-                        FullPath = file.FullName,
-                        Size = SafeLength(file),
-                        Modified = SafeTimestamp(file),
-                        Parent = node,
-                    };
-                    node.Files.Add(item);
-                    node.Size += item.Size;
-                    node.FileCount++;
-                    allFiles.Add(item);
-                    state.Files++;
-                    state.Bytes += item.Size;
-                    if (state.Files % 250 == 0)
+                        var item = new FileEntry
+                        {
+                            Name = file.Name,
+                            FullPath = file.FullName,
+                            Size = SafeLength(file),
+                            Modified = SafeTimestamp(file),
+                            Parent = node,
+                        };
+                        node.Files.Add(item);
+                        node.Size += item.Size;
+                        node.FileCount++;
+                        allFiles.Add(item);
+                        state.Files++;
+                        state.Bytes += item.Size;
+                        if (state.Files % 250 == 0)
+                        {
+                            Report(progress, state, file.FullName);
+                        }
+                    }
+                    else if (entry is DirectoryInfo childDir)
                     {
-                        Report(progress, state, file.FullName);
+                        if (exclusions.Contains(childDir.FullName))
+                        {
+                            continue;
+                        }
+
+                        var child = ScanDirectory(
+                            childDir,
+                            node,
+                            allFiles,
+                            ref errorCount,
+                            state,
+                            progress,
+                            cancellationToken,
+                            exclusions,
+                            rootLocation);
+                        node.Folders.Add(child);
+                        node.Size += child.Size;
+                        node.FileCount += child.FileCount;
+                        node.FolderCount += 1 + child.FolderCount;
+                        if (child.Modified > node.Modified)
+                        {
+                            node.Modified = child.Modified;
+                        }
                     }
                 }
-                else if (entry is DirectoryInfo childDir)
+                catch (Exception ex) when (IsSkippable(ex))
                 {
-                    if (exclusions.Contains(childDir.FullName))
-                    {
-                        continue;
-                    }
-
-                    var child = ScanDirectory(
-                        childDir,
-                        node,
-                        allFiles,
-                        ref errorCount,
-                        state,
-                        progress,
-                        cancellationToken,
-                        exclusions,
-                        rootLocation);
-                    node.Folders.Add(child);
-                    node.Size += child.Size;
-                    node.FileCount += child.FileCount;
-                    node.FolderCount += 1 + child.FolderCount;
-                    if (child.Modified > node.Modified)
-                    {
-                        node.Modified = child.Modified;
-                    }
+                    errorCount++;
                 }
-            }
-            catch (Exception ex) when (IsSkippable(ex))
-            {
-                errorCount++;
             }
         }
+        catch (Exception ex) when (IsSkippable(ex))
+        {
+            return SkipOrThrowRoot(ex, parent, directory.FullName, node, ref errorCount);
+        }
 
+        return node;
+    }
+
+    private static FolderNode SkipOrThrowRoot(
+        Exception ex,
+        FolderNode? parent,
+        string path,
+        FolderNode node,
+        ref int errorCount)
+    {
+        if (parent is null)
+        {
+            throw ScanAccess.ToScanException(
+                ex,
+                path,
+                ProcessElevation.IsCurrentProcessElevated());
+        }
+
+        errorCount++;
         return node;
     }
 

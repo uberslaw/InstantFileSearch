@@ -16,6 +16,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private readonly string _cachePath;
     private readonly string _exclusionsPath;
     private readonly IByteProtector _protector;
+    private readonly IFileDeleter _deleter;
+    private readonly bool _elevated;
     private readonly SynchronizationContext? _ui = SynchronizationContext.Current;
     private FolderExclusionSet _exclusions;
     private CancellationTokenSource? _scanCts;
@@ -37,8 +39,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private string _searchScope = "All scans";
     private string _matchMode = "Name or path";
     private bool _isAdvancedOpen;
-    private string _statusText = "Choose a folder and scan. Drop a folder on the window to start.";
+    private string _statusText = "Choose a folder and scan. Drop a folder on the window to start. UNC shares can be pasted in the path box.";
     private bool _isScanning;
+    private bool _isEditMode;
     private FolderNode? _selectedFolder;
     private EntryRow? _selectedEntry;
     private int _filesScanned;
@@ -46,9 +49,16 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private string _progressPath = "";
     private ObservableCollection<EntryRow> _items = [];
 
-    public MainViewModel(string? cachePath = null, string? exclusionsPath = null, IByteProtector? protector = null)
+    public MainViewModel(
+        string? cachePath = null,
+        string? exclusionsPath = null,
+        IByteProtector? protector = null,
+        IFileDeleter? deleter = null,
+        bool? elevated = null)
     {
         _protector = protector ?? ByteProtector.CreateDefault();
+        _deleter = deleter ?? new RecycleBinFileDeleter();
+        _elevated = elevated ?? ProcessElevation.IsCurrentProcessElevated();
         _cachePath = string.IsNullOrWhiteSpace(cachePath) ? ScanCache.DefaultFilePath : cachePath;
         _exclusionsPath = string.IsNullOrWhiteSpace(exclusionsPath) ? ExclusionStore.DefaultFilePath : exclusionsPath;
         _settingsPath = UiSettingsStore.DefaultFilePath;
@@ -65,7 +75,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
         RemoveScanCommand = new RelayCommand(RemoveSelectedScan, CanRemoveSelectedScan);
         RemoveExclusionCommand = new RelayCommand(RemoveSelectedExclusion, () => SelectedExclusion is not null);
         ShowExclusionsCommand = new RelayCommand(ShowExclusions);
+        DeleteCommand = new RelayCommand(DeleteSelected, CanDeleteSelected);
+        RunAsAdministratorCommand = new RelayCommand(RunAsAdministrator, () => !IsElevated && !IsScanning);
         SyncExclusionPaths();
+        if (_elevated)
+        {
+            _statusText = "Running as administrator. Admin shares such as \\\\SERVER\\C$ can be scanned from the path box.";
+        }
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -91,6 +107,41 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public ICommand RemoveScanCommand { get; }
     public ICommand RemoveExclusionCommand { get; }
     public ICommand ShowExclusionsCommand { get; }
+    public ICommand DeleteCommand { get; }
+    public ICommand RunAsAdministratorCommand { get; }
+
+    public bool IsElevated => _elevated;
+
+    public string WindowTitle => ProcessElevation.WindowTitle(IsElevated, IsEditMode);
+
+    public string PrivilegeText => ProcessElevation.PrivilegeLabel(IsElevated);
+
+    public string RunAsAdministratorTip => ProcessElevation.RunAsAdministratorTip(IsElevated);
+
+    public string EditModeBanner => UiInteractionMode.EditBanner;
+
+    public bool IsEditMode
+    {
+        get => _isEditMode;
+        set
+        {
+            if (SetField(ref _isEditMode, value))
+            {
+                OnPropertyChanged(nameof(IsViewMode));
+                OnPropertyChanged(nameof(WindowTitle));
+                ((RelayCommand)DeleteCommand).RaiseCanExecuteChanged();
+                StatusText = value
+                    ? UiInteractionMode.EditBanner
+                    : "View mode. Switch to Edit to delete files from the results list.";
+            }
+        }
+    }
+
+    public bool IsViewMode
+    {
+        get => !_isEditMode;
+        set => IsEditMode = !value;
+    }
 
     public string? SelectedExclusion
     {
@@ -281,6 +332,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 ((RelayCommand)CancelCommand).RaiseCanExecuteChanged();
                 ((RelayCommand)ExcludeFolderCommand).RaiseCanExecuteChanged();
                 ((RelayCommand)RemoveScanCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)DeleteCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)RunAsAdministratorCommand).RaiseCanExecuteChanged();
             }
         }
     }
@@ -445,22 +498,21 @@ public sealed class MainViewModel : INotifyPropertyChanged
             return;
         }
 
-        if (!LocalPathGuard.TryResolveExistingDirectory(ScanPath, out var path))
+        if (string.IsNullOrWhiteSpace(ScanPath))
         {
-            if (string.IsNullOrWhiteSpace(ScanPath))
+            Browse();
+        }
+
+        if (!LocalPathGuard.TryGetFullPath(ScanPath, out var path))
+        {
+            if (!string.IsNullOrWhiteSpace(ScanPath))
             {
-                Browse();
+                StatusText = UncPath.LooksLikeUnc(ScanPath)
+                    ? "That is not a usable UNC folder. Use \\\\server\\share or \\\\10.x.x.x\\share (admin shares like C$ need the share name)."
+                    : "Choose an existing folder to scan.";
             }
 
-            if (!LocalPathGuard.TryResolveExistingDirectory(ScanPath, out path))
-            {
-                if (!string.IsNullOrWhiteSpace(ScanPath))
-                {
-                    StatusText = "Choose an existing folder to scan.";
-                }
-
-                return;
-            }
+            return;
         }
 
         ScanPath = path;
@@ -515,6 +567,26 @@ public sealed class MainViewModel : INotifyPropertyChanged
             StatusText = _scans.Count == 0
                 ? "Scan cancelled."
                 : "Scan cancelled. Previous results kept.";
+            ProgressPath = "";
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            if (generation != _scanGeneration)
+            {
+                return;
+            }
+
+            StatusText = ex.Message;
+            ProgressPath = "";
+        }
+        catch (DirectoryNotFoundException ex)
+        {
+            if (generation != _scanGeneration)
+            {
+                return;
+            }
+
+            StatusText = ex.Message;
             ProgressPath = "";
         }
         catch (Exception ex)
@@ -703,6 +775,104 @@ public sealed class MainViewModel : INotifyPropertyChanged
             DataContext = this,
         };
         window.ShowDialog();
+    }
+
+    private bool CanDeleteSelected() =>
+        UiInteractionMode.CanDeleteFile(
+            IsEditMode,
+            IsScanning,
+            SelectedEntry is { IsFolder: false, File: not null });
+
+    public void DeleteSelected()
+    {
+        if (!CanDeleteSelected() || SelectedEntry is not { IsFolder: false, File: not null } entry)
+        {
+            return;
+        }
+
+        if (!LocalPathGuard.TryGetFullPath(entry.FullPath, out var path))
+        {
+            StatusText = "That path is invalid.";
+            return;
+        }
+
+        var scan = FindScan(entry.File.Parent)
+            ?? _scans.FirstOrDefault(item => IndexedFileDelete.IsIndexedFile(item, path, out _));
+        if (scan is null)
+        {
+            StatusText = "That file is not in the current scan.";
+            return;
+        }
+
+        var recycle = IndexedFileDelete.UsesRecycleBin(path);
+        var confirm = MessageBox.Show(
+            IndexedFileDelete.ConfirmMessage(entry.Name, path, recycle),
+            WindowTitle,
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning,
+            MessageBoxResult.No);
+        if (confirm != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!IndexedFileDelete.TryDeleteIndexedFile(scan, path, _deleter, out var updated))
+            {
+                StatusText = "Could not update the list after delete. Scan that folder again.";
+                return;
+            }
+
+            var parent = entry.File.Parent;
+            ReplaceScan(scan, updated);
+            PersistAllScans();
+            RefreshTree(parent ?? updated.Root);
+            ScheduleItemRefresh();
+            NotifyPresentation();
+            StatusText = recycle
+                ? $"Moved {entry.Name} to the Recycle Bin."
+                : $"Deleted {entry.Name}.";
+        }
+        catch (Exception ex)
+        {
+            StatusText = "Delete failed: " + ex.Message;
+            MessageBox.Show(
+                ex.Message,
+                WindowTitle,
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
+    public void RunAsAdministrator()
+    {
+        if (IsElevated)
+        {
+            StatusText = "Already running as administrator.";
+            return;
+        }
+
+        var exe = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(exe))
+        {
+            StatusText = "Cannot relaunch: the executable path is unknown.";
+            return;
+        }
+
+        try
+        {
+            Process.Start(ProcessElevation.RelaunchStartInfo(exe));
+            Application.Current?.Shutdown();
+        }
+        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode is 1223 or 1227)
+        {
+            StatusText = "Administrator launch was cancelled.";
+        }
+        catch (Exception ex)
+        {
+            StatusText = "Could not relaunch as administrator: " + ex.Message;
+        }
     }
 
     private void SyncExclusionPaths()
@@ -1150,6 +1320,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ((RelayCommand)CopyNameCommand).RaiseCanExecuteChanged();
         ((RelayCommand)ExcludeFolderCommand).RaiseCanExecuteChanged();
         ((RelayCommand)RemoveScanCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)DeleteCommand).RaiseCanExecuteChanged();
     }
 
     private void PostToUi(Action action)
