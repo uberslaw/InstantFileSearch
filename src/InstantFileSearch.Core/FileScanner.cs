@@ -44,7 +44,8 @@ public sealed class FileScanner
             progress,
             cancellationToken,
             exclusions,
-            location);
+            location,
+            fullRoot);
 
         SortTree(root);
         FolderFilesNode.Attach(root);
@@ -71,23 +72,24 @@ public sealed class FileScanner
         IProgress<ScanProgress>? progress,
         CancellationToken cancellationToken,
         FolderExclusionSet exclusions,
-        ScanLocationKind rootLocation)
+        ScanLocationKind rootLocation,
+        string rootFullPath)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         var node = new FolderNode
         {
             Name = parent is null
-                ? ScanLocation.DisplayName(directory.FullName, rootLocation)
+                ? ScanLocation.DisplayName(rootFullPath, rootLocation)
                 : directory.Name,
-            FullPath = directory.FullName,
+            FullPath = parent is null ? rootFullPath : directory.FullName,
             Parent = parent,
             Modified = SafeTimestamp(directory),
             LocationKind = parent is null ? rootLocation : ScanLocationKind.Unknown,
         };
 
         state.Folders++;
-        Report(progress, state, directory.FullName);
+        Report(progress, state, node.FullPath);
 
         IEnumerable<FileSystemInfo> entries;
         try
@@ -96,7 +98,7 @@ public sealed class FileScanner
         }
         catch (Exception ex) when (IsSkippable(ex))
         {
-            return SkipOrThrowRoot(ex, parent, directory.FullName, node, ref errorCount);
+            return SkipOrThrowRoot(ex, parent, parent is null ? rootFullPath : directory.FullName, node, ref errorCount);
         }
 
         try
@@ -144,7 +146,8 @@ public sealed class FileScanner
                             progress,
                             cancellationToken,
                             exclusions,
-                            rootLocation);
+                            rootLocation,
+                            rootFullPath);
                         node.Folders.Add(child);
                         node.Size += child.Size;
                         node.FileCount += child.FileCount;
@@ -163,7 +166,7 @@ public sealed class FileScanner
         }
         catch (Exception ex) when (IsSkippable(ex))
         {
-            return SkipOrThrowRoot(ex, parent, directory.FullName, node, ref errorCount);
+            return SkipOrThrowRoot(ex, parent, parent is null ? rootFullPath : directory.FullName, node, ref errorCount);
         }
 
         return node;
