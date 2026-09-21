@@ -34,10 +34,41 @@
                           ToolTip="Removes the selected scan from the list. Does not delete files on disk."/>
                 <MenuItem Header="Excluded folders…" Command="{Binding ShowExclusionsCommand}"/>
             </MenuItem>
-            <MenuItem Header="_Edit mode"
-                      IsCheckable="True"
-                      IsChecked="{Binding IsEditMode}"
-                      ToolTip="View is the default every launch. Edit lets you delete files from the results list (not folders). Not saved."/>
+            <MenuItem Header="_Edit">
+                <MenuItem Header="_Edit mode"
+                          IsCheckable="True"
+                          IsChecked="{Binding IsEditMode}"
+                          ToolTip="View is the default every launch. Edit lets you delete files and merge/move scanned folders. Not saved."/>
+                <Separator/>
+                <MenuItem Header="Merge into…"
+                          Command="{Binding MergeIntoCommand}"
+                          ToolTip="Edit mode. Merge this scanned folder into another folder already in the tree. Same-volume files are renamed — Explorer is not used.">
+                    <MenuItem.Style>
+                        <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <Trigger Property="IsEnabled" Value="True">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </MenuItem.Style>
+                </MenuItem>
+                <MenuItem Header="Merge/Move into selected"
+                          Command="{Binding MergeIntoSelectedCommand}"
+                          ToolTip="Edit mode. Merge another scanned folder into the selected folder. Plans from the index; skip existing by default.">
+                    <MenuItem.Style>
+                        <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <Trigger Property="IsEnabled" Value="True">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </MenuItem.Style>
+                </MenuItem>
+            </MenuItem>
         </Menu>
 
         <StatusBar DockPanel.Dock="Bottom">
@@ -124,7 +155,7 @@
                                   Margin="8,0,0,0"
                                   IsChecked="{Binding IsEditMode}"
                                   Style="{StaticResource EditModeToggle}"
-                                  ToolTip="View is the default every launch. Edit lets you delete files from the results list (not folders). Not saved."/>
+                                  ToolTip="View is the default every launch. Edit lets you delete files and merge/move scanned folders. Not saved."/>
                 </Grid>
                 <WrapPanel Margin="0,8,0,-8" Visibility="{Binding IsAdvancedOpen, Converter={StaticResource BoolToVis}}">
                     <Border Style="{StaticResource FilterGroup}">
@@ -241,6 +272,36 @@
                             <MenuItem Header="Copy name" Command="{Binding CopyNameCommand}" CommandParameter="tree"/>
                             <Separator/>
                             <MenuItem Header="Exclude folder" Command="{Binding ExcludeFolderCommand}" CommandParameter="tree"/>
+                            <MenuItem Header="Merge into…"
+                                      Command="{Binding MergeIntoCommand}"
+                                      CommandParameter="tree"
+                                      ToolTip="Edit mode. Merge this folder into another scanned folder. Same-volume files are renamed; Explorer is not used.">
+                                <MenuItem.Style>
+                                    <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <Trigger Property="IsEnabled" Value="True">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </MenuItem.Style>
+                            </MenuItem>
+                            <MenuItem Header="Merge/Move into selected"
+                                      Command="{Binding MergeIntoSelectedCommand}"
+                                      CommandParameter="tree"
+                                      ToolTip="Edit mode. Merge another scanned folder into this one.">
+                                <MenuItem.Style>
+                                    <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <Trigger Property="IsEnabled" Value="True">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </MenuItem.Style>
+                            </MenuItem>
                             <MenuItem Header="Remove from list"
                                       Command="{Binding RemoveScanCommand}"
                                       ToolTip="Removes this scan from the list. Does not delete files on disk.">
@@ -352,6 +413,20 @@
                                 <MenuItem Header="Copy name" Command="{Binding CopyNameCommand}"/>
                                 <Separator/>
                                 <MenuItem Header="Exclude folder" Command="{Binding ExcludeFolderCommand}"/>
+                                <MenuItem Header="Merge into…"
+                                          Command="{Binding MergeIntoCommand}"
+                                          ToolTip="Edit mode. Merge this folder into another scanned folder. Same-volume files are renamed; Explorer is not used.">
+                                    <MenuItem.Style>
+                                        <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsEnabled" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </MenuItem.Style>
+                                </MenuItem>
                                 <MenuItem Header="Delete…"
                                           Command="{Binding DeleteCommand}"
                                           ToolTip="Edit mode only. Deletes the selected file (not a folder). Not Exclude or Remove from list.">

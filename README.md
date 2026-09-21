@@ -17,6 +17,7 @@ Windows disk explorer in the TreeSize mold: scan a folder, see the largest direc
 - Right-click a folder to exclude it from this view and future scans (`Scan` → Excluded folders… to undo)
 - CLI for scan / search / status / exclude (same encrypted cache as the GUI). `scan` accepts UNC too.
 - Default **View** mode. **Edit** (toolbar toggle, not saved) lets you right-click a **file** in the results list and delete it after confirmation. Local Windows files go to the Recycle Bin; UNC files are permanently deleted. Folders are not deleted here. Delete is not Exclude and not Remove from list.
+- **Edit** also lets you **Merge / Move** a scanned folder into another folder already in the tree (right-click → **Merge into…**, or **Merge/Move into selected**). The plan comes from the in-memory index so Explorer is not asked to prepare/enumerate conflicts. Same drive letter or same UNC share is a rename (`File.Move`); a different volume copies then deletes. Default collision policy is **Skip existing** (Overwrite is optional). Progress is `Moved 12/520, skipped 40, failed 1` — not a bytes/sec ETA. If the destination is not in the index, scan it first.
 - Open, Show in Explorer, copy path; drag a folder onto the window to scan it
 
 ## Run
@@ -57,7 +58,7 @@ Linux/macOS can build the same pack (`pwsh -File scripts/PortablePublish.ps1 -De
 4. Type in Search (`Ctrl+F`) for an exact file or folder name, or use `*` / `?` for partial names. Open **Advanced** for size, date, folder scope, and name vs path. Select a folder result to highlight it in the left tree; Open or double-click to show that folder’s contents (clears the search box). Show in Explorer still opens Windows Explorer.
 5. Close and reopen: the last scan and its time come back from `%LocalAppData%\InstantFileSearch`
 6. Right-click a folder → Exclude folder to skip it next time
-7. Stay in **View** unless you need to delete. Switch on **Edit**, right-click a file in the list → **Delete…**, confirm name and path. Next launch is View again.
+7. Stay in **View** unless you need to delete or merge. Switch on **Edit**, right-click a file in the list → **Delete…**, or a folder in the tree → **Merge into…**. Confirm source → dest and skip vs overwrite. Next launch is View again.
 
 ## CLI
 

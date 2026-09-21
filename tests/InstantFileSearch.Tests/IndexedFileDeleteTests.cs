@@ -14,6 +14,7 @@ public class UiInteractionModeTests
         Assert.Equal("Delete…", UiInteractionMode.DeleteMenuHeader);
         Assert.Contains("right-click a file", UiInteractionMode.EditBanner, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("not Exclude", UiInteractionMode.EditBanner, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("merge", UiInteractionMode.EditBanner, StringComparison.OrdinalIgnoreCase);
     }
 }
 

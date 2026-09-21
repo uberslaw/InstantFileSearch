@@ -18,10 +18,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private readonly string _exclusionsPath;
     private readonly IByteProtector _protector;
     private readonly IFileDeleter _deleter;
+    private readonly IFileMover _mover;
     private readonly bool _elevated;
     private readonly SynchronizationContext? _ui = SynchronizationContext.Current;
     private FolderExclusionSet _exclusions;
     private CancellationTokenSource? _scanCts;
+    private CancellationTokenSource? _mergeCts;
     private CancellationTokenSource? _searchCts;
     private int _scanGeneration;
     private int _searchGeneration;
@@ -42,6 +44,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool _isAdvancedOpen;
     private string _statusText = "Choose a folder and scan. Drop a folder on the window to start. UNC shares can be pasted in the path box.";
     private bool _isScanning;
+    private bool _isMerging;
     private bool _isEditMode;
     private FolderNode? _selectedFolder;
     private EntryRow? _selectedEntry;
@@ -55,19 +58,21 @@ public sealed class MainViewModel : INotifyPropertyChanged
         string? exclusionsPath = null,
         IByteProtector? protector = null,
         IFileDeleter? deleter = null,
+        IFileMover? mover = null,
         bool? elevated = null)
     {
         _protector = protector ?? ByteProtector.CreateDefault();
         _deleter = deleter ?? new RecycleBinFileDeleter();
+        _mover = mover ?? new FileSystemFileMover();
         _elevated = elevated ?? ProcessElevation.IsCurrentProcessElevated();
         _cachePath = string.IsNullOrWhiteSpace(cachePath) ? ScanCache.DefaultFilePath : cachePath;
         _exclusionsPath = string.IsNullOrWhiteSpace(exclusionsPath) ? ExclusionStore.DefaultFilePath : exclusionsPath;
         _settingsPath = UiSettingsStore.DefaultFilePath;
         _exclusions = ExclusionStore.Load(_exclusionsPath, _protector);
         _treeSort = UiSettingsStore.Load(_settingsPath).TreeSort;
-        BrowseCommand = new RelayCommand(Browse, () => !IsScanning);
-        ScanCommand = new RelayCommand(async () => await ScanAsync(), () => !IsScanning);
-        CancelCommand = new RelayCommand(Cancel, () => IsScanning);
+        BrowseCommand = new RelayCommand(Browse, () => !IsBusy);
+        ScanCommand = new RelayCommand(async () => await ScanAsync(), () => !IsBusy);
+        CancelCommand = new RelayCommand(Cancel, () => IsBusy);
         OpenCommand = new RelayCommand(OpenSelected, () => SelectedEntry is not null);
         ShowInExplorerCommand = new RelayCommand(ShowInExplorer, _ => CanRevealSelection());
         CopyPathCommand = new RelayCommand(CopyPath, _ => CanCopySelection());
@@ -77,7 +82,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         RemoveExclusionCommand = new RelayCommand(RemoveSelectedExclusion, () => SelectedExclusion is not null);
         ShowExclusionsCommand = new RelayCommand(ShowExclusions);
         DeleteCommand = new RelayCommand(DeleteSelected, CanDeleteSelected);
-        RunAsAdministratorCommand = new RelayCommand(RunAsAdministrator, () => !IsElevated && !IsScanning);
+        MergeIntoCommand = new RelayCommand(MergeInto, CanMergeSelected);
+        MergeIntoSelectedCommand = new RelayCommand(MergeIntoSelected, CanMergeSelected);
+        RunAsAdministratorCommand = new RelayCommand(RunAsAdministrator, () => !IsElevated && !IsBusy);
         SyncExclusionPaths();
         if (_elevated)
         {
@@ -109,6 +116,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public ICommand RemoveExclusionCommand { get; }
     public ICommand ShowExclusionsCommand { get; }
     public ICommand DeleteCommand { get; }
+    public ICommand MergeIntoCommand { get; }
+    public ICommand MergeIntoSelectedCommand { get; }
     public ICommand RunAsAdministratorCommand { get; }
 
     public bool IsElevated => _elevated;
@@ -130,7 +139,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             {
                 OnPropertyChanged(nameof(IsViewMode));
                 OnPropertyChanged(nameof(WindowTitle));
-                ((RelayCommand)DeleteCommand).RaiseCanExecuteChanged();
+                RaiseBusyCommands();
                 StatusText = value
                     ? UiInteractionMode.EditBanner
                     : "View mode. Switch to Edit to delete files from the results list.";
@@ -328,18 +337,26 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             if (SetField(ref _isScanning, value))
             {
-                ((RelayCommand)BrowseCommand).RaiseCanExecuteChanged();
-                ((RelayCommand)ScanCommand).RaiseCanExecuteChanged();
-                ((RelayCommand)CancelCommand).RaiseCanExecuteChanged();
-                ((RelayCommand)ExcludeFolderCommand).RaiseCanExecuteChanged();
-                ((RelayCommand)RemoveScanCommand).RaiseCanExecuteChanged();
-                ((RelayCommand)DeleteCommand).RaiseCanExecuteChanged();
-                ((RelayCommand)RunAsAdministratorCommand).RaiseCanExecuteChanged();
+                RaiseBusyCommands();
             }
         }
     }
 
-    public bool IsIdle => !IsScanning;
+    public bool IsMerging
+    {
+        get => _isMerging;
+        private set
+        {
+            if (SetField(ref _isMerging, value))
+            {
+                RaiseBusyCommands();
+            }
+        }
+    }
+
+    public bool IsBusy => IsScanning || IsMerging;
+
+    public bool IsIdle => !IsBusy;
 
     public FolderNode? SelectedFolder
     {
@@ -494,7 +511,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public async Task ScanAsync()
     {
-        if (IsScanning)
+        if (IsBusy)
         {
             return;
         }
@@ -611,7 +628,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    public void Cancel() => _scanCts?.Cancel();
+    public void Cancel()
+    {
+        _scanCts?.Cancel();
+        _mergeCts?.Cancel();
+    }
 
     public void OpenSelected()
     {
@@ -714,7 +735,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private bool CanExcludeSelectedFolder()
     {
-        if (IsScanning)
+        if (IsBusy)
         {
             return false;
         }
@@ -781,7 +802,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool CanDeleteSelected() =>
         UiInteractionMode.CanDeleteFile(
             IsEditMode,
-            IsScanning,
+            IsBusy,
             SelectedEntry is { IsFolder: false, File: not null });
 
     public void DeleteSelected()
@@ -844,6 +865,181 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
         }
+    }
+
+    private bool CanMergeSelected(object? parameter)
+    {
+        var folder = TargetFolder(parameter);
+        return UiInteractionMode.CanMergeFolder(
+            IsEditMode,
+            IsBusy,
+            folder is { IsFilesNode: false });
+    }
+
+    public void MergeInto(object? parameter) =>
+        PromptMerge(source: TargetFolder(parameter), dest: null);
+
+    public void MergeIntoSelected(object? parameter) =>
+        PromptMerge(source: null, dest: TargetFolder(parameter));
+
+    private void PromptMerge(FolderNode? source, FolderNode? dest)
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        var folder = source ?? dest;
+        if (folder is null || !UiInteractionMode.CanMergeFolder(IsEditMode, IsBusy, !folder.IsFilesNode))
+        {
+            return;
+        }
+
+        if (folder.IsFilesNode)
+        {
+            StatusText = "FILES is not a folder you can merge.";
+            return;
+        }
+
+        var window = new MergeFoldersWindow
+        {
+            Owner = Application.Current?.MainWindow,
+            Folders = IndexedFolderChoices(),
+            Preview = PreviewMerge,
+            SourcePath = source?.FullPath ?? "",
+            DestPath = dest?.FullPath ?? "",
+        };
+        if (window.ShowDialog() != true)
+        {
+            return;
+        }
+
+        if (window.DestNeedsScan)
+        {
+            OfferScanDest(window.DestPath);
+            return;
+        }
+
+        if (window.Plan is null)
+        {
+            return;
+        }
+
+        _ = RunMergeAsync(window.Plan);
+    }
+
+    private MergePlanResult PreviewMerge(string sourcePath, string destPath, CollisionPolicy policy)
+    {
+        if (!IndexedFileMerge.TryFindFolder(_scans, sourcePath, out var source, out _) || source is null)
+        {
+            return MergePlanResult.Fail("The source folder is not in the scan index. Scan it first.");
+        }
+
+        if (source.IsFilesNode)
+        {
+            return MergePlanResult.Fail("FILES is not a folder you can merge from.");
+        }
+
+        return IndexedFileMerge.TryBuildPlan(_scans, source, destPath, policy);
+    }
+
+    private void OfferScanDest(string destPath)
+    {
+        var ask = MessageBox.Show(
+            IndexedFileMerge.DestNeedsScanMessage + "\n\nScan that folder now?",
+            WindowTitle,
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question,
+            MessageBoxResult.Yes);
+        if (ask != MessageBoxResult.Yes)
+        {
+            StatusText = IndexedFileMerge.DestNeedsScanMessage;
+            return;
+        }
+
+        ScanPath = destPath;
+        _ = ScanAsync();
+    }
+
+    private async Task RunMergeAsync(MergePlan plan)
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        var cts = new CancellationTokenSource();
+        var previous = _mergeCts;
+        _mergeCts = cts;
+        previous?.Dispose();
+
+        IsMerging = true;
+        StatusText = IndexedFileMerge.ProgressText(0, plan.FileCount, 0, 0);
+        ProgressPath = plan.SourceFolder.FullPath;
+
+        var progress = new Progress<MergeProgress>(update =>
+        {
+            StatusText = update.StatusText;
+            ProgressPath = update.CurrentPath;
+        });
+
+        try
+        {
+            var result = await Task.Run(
+                () => IndexedFileMerge.Execute(plan, _mover, progress, cts.Token),
+                CancellationToken.None);
+
+            ReplaceScan(plan.SourceScan, result.SourceScan);
+            if (!plan.SameScan)
+            {
+                ReplaceScan(plan.DestScan, result.DestScan);
+            }
+
+            PersistAllScans();
+            RefreshTree(plan.DestFolder);
+            ScheduleItemRefresh();
+            NotifyPresentation();
+            StatusText = result.Cancelled
+                ? "Merge cancelled. " + result.StatusText + ". Remaining files left in place."
+                : "Merge complete. " + result.StatusText;
+            if (result.Failed > 0)
+            {
+                MessageBox.Show(
+                    result.StatusText + "\n\nIn-use and access-denied files were skipped. Completed moves were kept.",
+                    WindowTitle,
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusText = "Merge failed: " + ex.Message;
+            MessageBox.Show(
+                ex.Message,
+                WindowTitle,
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+        finally
+        {
+            IsMerging = false;
+            ProgressPath = "";
+        }
+    }
+
+    private List<MergeFolderChoice> IndexedFolderChoices()
+    {
+        var list = new List<MergeFolderChoice>();
+        foreach (var folder in FolderFilesNode.FoldersForSearch(TreeRoots, selected: null, selectedFolderScope: false))
+        {
+            list.Add(new MergeFolderChoice
+            {
+                Name = folder.Name,
+                FullPath = folder.FullPath,
+            });
+        }
+
+        return list;
     }
 
     public void RunAsAdministrator()
@@ -1090,11 +1286,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     private bool CanRemoveSelectedScan() =>
-        ResultsUi.ShowRemoveFromList(SelectedFolder, IsScanning) && FindScan(SelectedFolder) is not null;
+        ResultsUi.ShowRemoveFromList(SelectedFolder, IsBusy) && FindScan(SelectedFolder) is not null;
 
     public void RemoveSelectedScan()
     {
-        if (!ResultsUi.ShowRemoveFromList(SelectedFolder, IsScanning))
+        if (!ResultsUi.ShowRemoveFromList(SelectedFolder, IsBusy))
         {
             return;
         }
@@ -1286,7 +1482,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         ReplaceItems(rows);
 
-        if (_scans.Count > 0 && !IsScanning && !IsSearchActive)
+        if (_scans.Count > 0 && !IsBusy && !IsSearchActive)
         {
             StatusText = SelectedFolder.IsFilesNode
                 ? $"{files.Count:N0} files in {FolderFilesNode.OwnerName(SelectedFolder)}"
@@ -1322,6 +1518,23 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ((RelayCommand)ExcludeFolderCommand).RaiseCanExecuteChanged();
         ((RelayCommand)RemoveScanCommand).RaiseCanExecuteChanged();
         ((RelayCommand)DeleteCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)MergeIntoCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)MergeIntoSelectedCommand).RaiseCanExecuteChanged();
+    }
+
+    private void RaiseBusyCommands()
+    {
+        ((RelayCommand)BrowseCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)ScanCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)CancelCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)ExcludeFolderCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)RemoveScanCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)DeleteCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)MergeIntoCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)MergeIntoSelectedCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)RunAsAdministratorCommand).RaiseCanExecuteChanged();
+        OnPropertyChanged(nameof(IsIdle));
+        OnPropertyChanged(nameof(IsBusy));
     }
 
     private void PostToUi(Action action)
