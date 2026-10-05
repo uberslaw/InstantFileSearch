@@ -7,11 +7,17 @@ Windows disk explorer in the TreeSize mold: scan a folder, see the largest direc
 - Scans a drive, folder, or **UNC share** (`\\server\share`, `\\10.x.x.x\c$`) in the background (reparse points — junctions and symlinks — skipped; child access-denied paths ignored). Paste UNC in the path box (Browse is a local folder dialog). Admin shares (`C$`, `D$`) typically need **File → Run as administrator** (UAC once — Scan does not prompt). The window title and status show **Administrator** when elevated.
 - Shows a folder tree (default: largest first) with percent-of-parent bars. Each distinct scanned location is a top-level root (`this PC` or `network`) with that scan’s duration. Scanning the same path again replaces that root; different paths accumulate. Right-click a root → **Remove from list** (does not delete files). Each completed scan is appended to `%LocalAppData%\InstantFileSearch\logs\scans.log`.
 - Lists files and subfolders for the selected directory
-- Instant search across the scanned index: files **and folders** (not the synthetic **FILES** row). Default is a case-insensitive **whole-name** match, including the extension (`cmd` does not match `cmd.exe` or `anythingwithcmdinit`). Wildcards: `*` any run of characters, `?` one character (`cmd*`, `*cmd`, `*cmd*`). **Advanced** (collapsed by default) adds size from/to (B–TB, 1024-based), modified from/to (`yyyy-MM-dd`), scope (all scans or the selected folder), and match field:
-  - **Name** — equality / wildcard on `Name` (scan roots use the displayed name, e.g. `C:\Work (this PC)`; nested folders use the directory name, including extension if any)
-  - **Path** — equality on the full path when there are no wildcards (use `*\cmd` or `*\cmd.exe` for a last segment); wildcards run against the full path
-  - **Name or path** (default) — either field
-  Empty bounds mean no limit; size/date-only search is allowed. Typing is debounced (200 ms) and filtered off the UI thread (first 5,000 matches). Filters apply to the in-memory index and are not saved.
+- Instant search across the scanned index: files **and folders** (not the synthetic **FILES** row). Typing is debounced (200 ms) and filtered off the UI thread (first 5,000 matches). Filters apply to the in-memory index and are not saved. Expression language (search box and CLI `search`; not regex, not Everything):
+  - **Single term, no `+`:** case-insensitive **whole-name** equality, including the extension (`cmd` does not match `cmd.exe` or `anythingwithcmdinit`).
+  - **Wildcards:** `*` any run of characters, `?` one character (`cmd*`, `*cmd`, `*cmd*`, `c?d`).
+  - **AND:** `cisco + zero` (spaces around `+` optional; `cisco+zero` is the same). Every term must match. **When `+` is present, a term without `*`/`?` is treated as contains** (`*cisco*` AND `*zero*`) so `cisco-zero-day.pdf` and a path containing both words can hit. A **single** term without `+` stays exact. Spaces are **not** AND (names with spaces stay intact). **No OR.**
+  - **Quoted phrase:** `"cisco zero"` is one term (exact if it is the only term; contains if used with `+`).
+  - **`path:` filter** (case-insensitive prefix): `path:Incoming` or `path:\\server\share\cisco` keeps hits whose **full path contains** that string (`/` and `\` are equivalent, OrdinalIgnoreCase). No wildcards in the value → contains (paths are long). `path:*\share\*` uses `*` / `?`. Several `path:` tokens AND together. `path:` is **not** a Name-mode term — it still applies when Match is Name. Combine: `*zero* path:cisco`, `cisco + zero path:Incoming`.
+  - **Advanced** (collapsed by default): size from/to (B–TB, 1024-based), modified from/to (`yyyy-MM-dd`), scope (all scans or the selected folder), and match field for **terms** (not `path:`):
+    - **Name** — equality / wildcard on `Name` (scan roots use the displayed name, e.g. `C:\Work (this PC)`; nested folders use the directory name, including extension if any)
+    - **Path** — equality on the full path when there are no wildcards (use `*\cmd` or `*\cmd.exe` for a last segment); wildcards run against the full path
+    - **Name or path** (default) — either field
+  Empty bounds mean no limit; size/date-only search is allowed (empty text + Advanced).
 - Left tree: sort scan roots and each folder’s children **A–Z**, **Z–A**, **Size ↓** (largest first, default), or **Size ↑**. **FILES** sorts with siblings (name `FILES`, or its direct-file size). The choice is saved in `%LocalAppData%\InstantFileSearch\ui-settings.json` (plain JSON, not encrypted). The tree is re-sorted when you change the combo and when a scan completes — not on every file during a scan.
 - Restores the last successful scan from disk on launch (including when it ran); Scan again to refresh.
 - Right-click a folder to exclude it from this view and future scans (`Scan` → Excluded folders… to undo)
@@ -55,7 +61,7 @@ Linux/macOS can build the same pack (`pwsh -File scripts/PortablePublish.ps1 -De
 1. Browse or drop a folder, or paste a UNC path (`\\SERVER\share`)
 2. Scan (F5). If an admin share is denied, use **Run as administrator** and scan again. A failed scan keeps the last good tree.
 3. Click folders on the left. Use the sort combo (**A–Z**, **Z–A**, **Size ↓**, **Size ↑**) to browse. Right-click → **Show in Explorer** opens that folder (`FILES` opens the parent). Right-click a scan root → **Remove from list** drops that location from the tree and search (files on disk stay).
-4. Type in Search (`Ctrl+F`) for an exact file or folder name, or use `*` / `?` for partial names. Open **Advanced** for size, date, folder scope, and name vs path. Select a folder result to highlight it in the left tree; Open or double-click to show that folder’s contents (clears the search box). Show in Explorer still opens Windows Explorer.
+4. Type in Search (`Ctrl+F`) for an exact file or folder name, or use `*` / `?`, `cisco + zero` (contains-AND), `path:Incoming`, and quotes as in the list above. Open **Advanced** for size, date, folder scope, and name vs path. Select a folder result to highlight it in the left tree; Open or double-click to show that folder’s contents (clears the search box). Show in Explorer still opens Windows Explorer.
 5. Close and reopen: the last scan and its time come back from `%LocalAppData%\InstantFileSearch`
 6. Right-click a folder → Exclude folder to skip it next time
 7. Stay in **View** unless you need to delete or merge. Switch on **Edit**, right-click a file in the list → **Delete…**, or a folder in the tree → **Merge into…**. Confirm source → dest and skip vs overwrite. Next launch is View again.
@@ -69,6 +75,8 @@ dotnet run --project src/InstantFileSearch.Cli -- scan C:\Work
 dotnet run --project src/InstantFileSearch.Cli -- scan \\SERVER\share
 dotnet run --project src/InstantFileSearch.Cli -- search *.log
 dotnet run --project src/InstantFileSearch.Cli -- search cmd.exe
+dotnet run --project src/InstantFileSearch.Cli -- search "cisco + zero"
+dotnet run --project src/InstantFileSearch.Cli -- search "path:Incoming *zip"
 dotnet run --project src/InstantFileSearch.Cli -- status
 dotnet run --project src/InstantFileSearch.Cli -- exclude add C:\Work\node_modules
 dotnet run --project src/InstantFileSearch.Cli -- exclude list

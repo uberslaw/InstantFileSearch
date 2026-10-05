@@ -141,9 +141,9 @@
                     </Grid.ColumnDefinitions>
                     <TextBox x:Name="SearchBox"
                              Grid.Column="0"
-                             Tag="Search files and folders  ·  * and ? for partial names"
+                             Tag="{Binding SearchBoxPlaceholder}"
                              Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="Exact name match (including extension). Use * and ? for partial names. Ctrl+F or F3 to focus. Empty text is allowed with Advanced filters."/>
+                             ToolTip="{Binding SearchBoxTip}"/>
                     <ToggleButton Grid.Column="1"
                                   Content="Advanced"
                                   Margin="8,0,0,0"
@@ -219,7 +219,7 @@
                             <ComboBox MinWidth="148"
                                       ItemsSource="{Binding MatchModeOptions}"
                                       SelectedItem="{Binding MatchMode}"
-                                      ToolTip="Without * or ?, Name equals the whole file or folder name (including extension). Path equals the whole path. Name or path tries both. Use *\cmd or *cmd* for partial paths."/>
+                                      ToolTip="{Binding SearchMatchTip}"/>
                         </StackPanel>
                     </Border>
                 </WrapPanel>

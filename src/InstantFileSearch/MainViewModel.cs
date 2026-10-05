@@ -197,6 +197,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public IReadOnlyList<string> MatchModeOptions { get; } = ["Name or path", "Name", "Path"];
 
+    public string SearchBoxPlaceholder => ResultsUi.SearchBoxPlaceholder;
+
+    public string SearchBoxTip => ResultsUi.SearchBoxTip;
+
+    public string SearchMatchTip => ResultsUi.SearchMatchTip;
+
     public IReadOnlyList<string> TreeSortOptions => TreeSort.Labels;
 
     public string TreeSortChoice

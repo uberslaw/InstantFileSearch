@@ -279,7 +279,126 @@ public class SearchFilterTests
 
         var filesHits = FileNameSearch.FilterHits([filesNode], files, new SearchQuery { Text = "FILES" });
         Assert.Empty(filesHits);
+        Assert.Empty(FileNameSearch.FilterHits([filesNode], files, new SearchQuery { Text = "cisco + zero" }));
     }
+
+    [Fact]
+    public void AndContainsDoesNotChangeSingleTermExactDefault()
+    {
+        var files = new[]
+        {
+            File("cisco", @"C:\docs\cisco", 1),
+            File("anythingwithciscoinit", @"C:\docs\anythingwithciscoinit", 1),
+            File("cisco-zero-day.txt", @"C:\docs\cisco-zero-day.txt", 1),
+        };
+
+        Assert.Equal(["cisco"], Names(files, "cisco", SearchMatchMode.Name));
+        Assert.DoesNotContain("anythingwithciscoinit", Names(files, "cisco", SearchMatchMode.Name));
+        Assert.DoesNotContain("cisco-zero-day.txt", Names(files, "cisco", SearchMatchMode.Name));
+    }
+
+    [Fact]
+    public void AndContainsMatchesNameVsPathVsBoth()
+    {
+        var bothInName = File("cisco-zero-day.txt", @"C:\docs\cisco-zero-day.txt", 1);
+        var pathOnly = File("zero.log", @"foo\cisco\zero.log", 1);
+        var ciscoOnly = File("cisco.txt", @"C:\docs\cisco.txt", 1);
+        var files = new[] { bothInName, pathOnly, ciscoOnly };
+
+        Assert.Equal(["cisco-zero-day.txt"], Names(files, "cisco + zero", SearchMatchMode.Name));
+        Assert.Equal(
+            ["cisco-zero-day.txt", "zero.log"],
+            Names(files, "cisco + zero", SearchMatchMode.Path));
+        Assert.Equal(
+            ["cisco-zero-day.txt", "zero.log"],
+            Names(files, "cisco+zero", SearchMatchMode.NameOrPath));
+        Assert.Empty(Names(files, "cisco + zero", SearchMatchMode.Name).Where(name => name == "cisco.txt"));
+        Assert.DoesNotContain("cisco.txt", Names(files, "cisco + zero", SearchMatchMode.Path));
+        Assert.DoesNotContain("cisco.txt", Names(files, "cisco + zero", SearchMatchMode.NameOrPath));
+        Assert.DoesNotContain("zero.log", Names(files, "cisco + zero", SearchMatchMode.Name));
+    }
+
+    [Fact]
+    public void PathFilterRestrictsHitsEvenWhenMatchIsName()
+    {
+        var files = new[]
+        {
+            File("a.zip", @"C:\Work\Incoming\a.zip", 1),
+            File("b.zip", @"C:\Work\Other\b.zip", 1),
+            File("c.txt", @"C:\Work\Incoming\c.txt", 1),
+            File("d.zip", @"C:\Work\incoming\nested\d.zip", 1),
+        };
+
+        Assert.Equal(
+            ["a.zip", "d.zip"],
+            Names(files, "path:Incoming *zip", SearchMatchMode.Name));
+        Assert.Equal(
+            ["a.zip", "d.zip"],
+            Names(files, "path:Incoming *zip", SearchMatchMode.Path));
+        Assert.Empty(Names(files, "path:Incoming *zip", SearchMatchMode.Name).Where(name => name is "b.zip" or "c.txt"));
+    }
+
+    [Fact]
+    public void PathOnlyFilterKeepsHitsUnderThatString()
+    {
+        var files = new[]
+        {
+            File("keep.bin", @"C:\Work\Incoming\keep.bin", 1),
+            File("skip.bin", @"C:\Work\Other\skip.bin", 1),
+        };
+
+        Assert.Equal(["keep.bin"], Names(files, "path:Incoming", SearchMatchMode.Name));
+    }
+    {
+        var files = new[]
+        {
+            File("hit.txt", "foo/cisco/Incoming/hit.txt", 1),
+            File("miss.txt", @"foo\cisco\Other\miss.txt", 1),
+        };
+
+        Assert.Equal(
+            ["hit.txt"],
+            Names(files, @"path:cisco path:Incoming", SearchMatchMode.Name));
+        Assert.Empty(Names(files, "path:Missing", SearchMatchMode.NameOrPath));
+    }
+
+    [Fact]
+    public void QuotedPhraseAndWildcardAnd()
+    {
+        var files = new[]
+        {
+            File("cisco zero.txt", @"C:\docs\cisco zero.txt", 1),
+            File("cisco-zero-day.txt", @"C:\docs\cisco-zero-day.txt", 1),
+            File("zero.txt", @"C:\docs\zero.txt", 1),
+        };
+
+        Assert.Equal(["cisco zero.txt"], Names(files, "\"cisco zero.txt\"", SearchMatchMode.Name));
+        Assert.Empty(Names(files, "\"cisco zero\"", SearchMatchMode.Name));
+        Assert.Equal(
+            ["cisco-zero-day.txt"],
+            Names(files, "cisco* + *zero*", SearchMatchMode.Name));
+        Assert.Equal(
+            ["cisco zero.txt"],
+            Names(files, "\"cisco zero\" + txt", SearchMatchMode.Name));
+    }
+
+    [Fact]
+    public void SpaceIsNotAnd()
+    {
+        var files = new[]
+        {
+            File("cisco zero.txt", @"C:\docs\cisco zero.txt", 1),
+            File("cisco-zero-day.txt", @"C:\docs\cisco-zero-day.txt", 1),
+        };
+
+        Assert.Equal(["cisco zero.txt"], Names(files, "cisco zero.txt", SearchMatchMode.Name));
+        Assert.Empty(Names(files, "cisco zero", SearchMatchMode.Name));
+    }
+
+    private static List<string> Names(FileEntry[] files, string text, SearchMatchMode match) =>
+        FileNameSearch.Filter(files, new SearchQuery { Text = text, Match = match })
+            .Select(file => file.Name)
+            .ToList();
 
     [Fact]
     public void PathWithoutWildcardEqualsFullPath()

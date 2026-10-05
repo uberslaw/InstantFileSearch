@@ -159,6 +159,12 @@ public class ResultsUiTests
         Assert.Equal("\uE7C3", ResultsUi.FileGlyph(isFolder: false));
         Assert.Contains("left tree", ResultsUi.FolderResultClickHint, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("clears the search box", ResultsUi.FolderResultClickHint, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("exact whole name", ResultsUi.SearchBoxTip, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("cisco + zero", ResultsUi.SearchBoxTip, StringComparison.Ordinal);
+        Assert.Contains("path:Incoming", ResultsUi.SearchBoxTip, StringComparison.Ordinal);
+        Assert.Contains("No OR", ResultsUi.SearchBoxTip, StringComparison.Ordinal);
+        Assert.Contains("not to path:", ResultsUi.SearchMatchTip, StringComparison.Ordinal);
+        Assert.Contains("+ AND", ResultsUi.SearchBoxPlaceholder, StringComparison.Ordinal);
     }
 
     [Fact]

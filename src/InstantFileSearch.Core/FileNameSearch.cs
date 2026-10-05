@@ -35,9 +35,7 @@ public static class FileNameSearch
             yield break;
         }
 
-        var pattern = query.Text.Trim();
-        var hasText = pattern.Length > 0;
-        var wildcard = HasWildcard(pattern);
+        var expression = SearchExpression.Parse(query.Text);
         var taken = 0;
 
         foreach (var folder in folders)
@@ -58,9 +56,7 @@ public static class FileNameSearch
                     folder.Size,
                     folder.Modified,
                     folder.Parent?.FullPath,
-                    pattern,
-                    hasText,
-                    wildcard,
+                    expression,
                     query))
             {
                 continue;
@@ -83,9 +79,7 @@ public static class FileNameSearch
                     file.Size,
                     file.Modified,
                     file.Parent?.FullPath,
-                    pattern,
-                    hasText,
-                    wildcard,
+                    expression,
                     query))
             {
                 continue;
@@ -131,9 +125,7 @@ public static class FileNameSearch
         long size,
         DateTime modified,
         string? parentPath,
-        string pattern,
-        bool hasText,
-        bool wildcard,
+        SearchExpression expression,
         SearchQuery query)
     {
         if (!MatchesSize(size, query) || !MatchesModified(modified, query) || !MatchesFolder(fullPath, parentPath, query))
@@ -141,7 +133,52 @@ public static class FileNameSearch
             return false;
         }
 
-        return !hasText || Matches(name, fullPath, pattern, wildcard, query.Match);
+        if (!MatchesPathFilters(fullPath, expression.PathFilters))
+        {
+            return false;
+        }
+
+        if (expression.Terms.Count == 0)
+        {
+            return true;
+        }
+
+        foreach (var term in expression.Terms)
+        {
+            if (!Matches(name, fullPath, term.Pattern, term.Wildcard, query.Match))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool MatchesPathFilters(string fullPath, IReadOnlyList<SearchTerm> filters)
+    {
+        if (filters.Count == 0)
+        {
+            return true;
+        }
+
+        var path = SearchExpression.NormalizeSlashes(fullPath);
+        foreach (var filter in filters)
+        {
+            var pattern = SearchExpression.NormalizeSlashes(filter.Pattern);
+            if (filter.Wildcard)
+            {
+                if (!FileSystemName.MatchesSimpleExpression(pattern, path, ignoreCase: true))
+                {
+                    return false;
+                }
+            }
+            else if (!path.Contains(pattern, Comparison))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool MatchesSize(long size, SearchQuery query)

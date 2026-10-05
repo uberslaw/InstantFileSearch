@@ -238,7 +238,7 @@ public static class CliHost
     {
         output.WriteLine("Instant File Search CLI");
         output.WriteLine("  scan <folder>              Scan a local folder or UNC share (\\\\server\\share)");
-        output.WriteLine("  search <query>             Exact name (files and folders), or * ? wildcards");
+        output.WriteLine("  search <query>             Same expressions as the GUI: exact name, * ?, + AND, path:");
         output.WriteLine("  status                     Last scan time, size, exclusions");
         output.WriteLine("  exclude add|list|remove    Skip folders on future scans");
         output.WriteLine("Shares the GUI cache under %LocalAppData%\\InstantFileSearch");

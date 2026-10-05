@@ -177,6 +177,24 @@ public static class ResultsUi
     public const string FolderResultClickHint =
         "Select a folder result to highlight it in the left tree. Open or double-click to show its contents (clears the search box).";
 
+    public const string SearchBoxPlaceholder =
+        "Search  ·  exact name  ·  * ?  ·  + AND  ·  path:";
+
+    /// <summary>
+    /// Full expression language for the search box tooltip. Keep in sync with README.
+    /// </summary>
+    public const string SearchBoxTip =
+        "Single term: exact whole name, including extension (cmd does not match cmd.exe or anythingwithcmdinit).\n" +
+        "Wildcards: * any characters, ? one character (cmd*, *cmd, *cmd*, c?d).\n" +
+        "AND: cisco + zero (spaces around + optional, cisco+zero is the same). Each term must match. A term without * or ? is treated as contains (*term*) only when + is used. A single term without + stays exact.\n" +
+        "Quoted phrase: \"cisco zero\" is one term (exact if alone; contains if used with +).\n" +
+        "path:Incoming — hits whose full path contains Incoming (/ and \\ are the same). Applies even when Match is Name. No wildcards → contains; path:*\\share\\* uses * and ?. Several path: tokens AND together.\n" +
+        "Match Name / Path / Name or path applies to terms, not to path:. Scope, size, and date still apply. Empty box + Advanced filters is allowed.\n" +
+        "Spaces are not AND. No OR. No regex. Ctrl+F or F3.";
+
+    public const string SearchMatchTip =
+        "Match applies to search terms, not to path: filters. Without * or ?, a single term equals the whole name (or the whole path). cisco + zero is contains-AND on this field. Use *\\cmd or *cmd* for partial paths.";
+
     private static string? NullIfEmpty(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value;
 }

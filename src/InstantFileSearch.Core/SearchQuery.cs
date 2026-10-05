@@ -26,7 +26,7 @@ public sealed class SearchQuery
     public SearchMatchMode Match { get; init; } = SearchMatchMode.NameOrPath;
 
     public bool HasCriteria =>
-        !string.IsNullOrWhiteSpace(Text)
+        SearchExpression.Parse(Text).HasText
         || MinSizeBytes is not null
         || MaxSizeBytes is not null
         || ModifiedFrom is not null

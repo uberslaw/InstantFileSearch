@@ -184,7 +184,48 @@ public class CliHostTests
     {
         var output = new StringWriter();
         Assert.Equal(0, CliHost.Run(["help"], output, new StringWriter()));
-        Assert.Contains(@"\\server\share", output.ToString(), StringComparison.Ordinal);
+        var help = output.ToString();
+        Assert.Contains(@"\\server\share", help, StringComparison.Ordinal);
+        Assert.Contains("path:", help, StringComparison.Ordinal);
+        Assert.Contains("+ AND", help, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SearchAcceptsAndAndPathExpressions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ifs-cli-expr-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Incoming"));
+        Directory.CreateDirectory(Path.Combine(root, "Other"));
+        File.WriteAllBytes(Path.Combine(root, "Incoming", "cisco-zero-day.txt"), new byte[4]);
+        File.WriteAllBytes(Path.Combine(root, "Incoming", "only-cisco.txt"), new byte[4]);
+        File.WriteAllBytes(Path.Combine(root, "Other", "pack.zip"), new byte[4]);
+        var cache = Path.Combine(Path.GetTempPath(), "ifs-cli-expr-cache-" + Guid.NewGuid().ToString("N") + ".bin");
+        var exclusions = Path.Combine(Path.GetTempPath(), "ifs-cli-expr-ex-" + Guid.NewGuid().ToString("N") + ".bin");
+        var protector = new PassThroughByteProtector();
+        try
+        {
+            Assert.Equal(0, Run(["scan", root], cache, exclusions, protector, out _, out _));
+            Assert.Equal(0, Run(["search", "cisco", "+", "zero"], cache, exclusions, protector, out var andOut, out _));
+            Assert.Contains("cisco-zero-day.txt", andOut);
+            Assert.DoesNotContain("only-cisco.txt", andOut);
+            Assert.Equal(0, Run(["search", "path:Incoming", "*txt"], cache, exclusions, protector, out var pathOut, out _));
+            Assert.Contains("cisco-zero-day.txt", pathOut);
+            Assert.Contains("only-cisco.txt", pathOut);
+            Assert.DoesNotContain("pack.zip", pathOut);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+            if (File.Exists(cache))
+            {
+                File.Delete(cache);
+            }
+
+            if (File.Exists(exclusions))
+            {
+                File.Delete(exclusions);
+            }
+        }
     }
 
     private static int Run(string[] args, string cache, string exclusions, IByteProtector protector, out string stdout, out string stderr)
