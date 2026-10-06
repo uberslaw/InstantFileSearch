@@ -349,6 +349,9 @@ public class SearchFilterTests
 
         Assert.Equal(["keep.bin"], Names(files, "path:Incoming", SearchMatchMode.Name));
     }
+
+    [Fact]
+    public void PathFilterNormalizesSlashesAndAndsTogether()
     {
         var files = new[]
         {
@@ -375,8 +378,9 @@ public class SearchFilterTests
         Assert.Equal(["cisco zero.txt"], Names(files, "\"cisco zero.txt\"", SearchMatchMode.Name));
         Assert.Empty(Names(files, "\"cisco zero\"", SearchMatchMode.Name));
         Assert.Equal(
-            ["cisco-zero-day.txt"],
+            ["cisco zero.txt", "cisco-zero-day.txt"],
             Names(files, "cisco* + *zero*", SearchMatchMode.Name));
+        Assert.DoesNotContain("zero.txt", Names(files, "cisco* + *zero*", SearchMatchMode.Name));
         Assert.Equal(
             ["cisco zero.txt"],
             Names(files, "\"cisco zero\" + txt", SearchMatchMode.Name));
