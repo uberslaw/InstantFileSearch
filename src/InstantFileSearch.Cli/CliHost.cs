@@ -63,7 +63,13 @@ public static class CliHost
         }
 
         var exclusions = ExclusionStore.Load(exclusionsPath, protector);
-        ScanCache.TryLoadAll(cachePath, out var existing, protector);
+        var existingLoad = ScanCache.LoadAll(cachePath, protector);
+        if (existingLoad.Status == ScanCacheLoadStatus.Failed)
+        {
+            error.WriteLine(existingLoad.Error ?? ScanCache.FormatLoadFailed(cachePath));
+        }
+
+        var existing = existingLoad.Scans;
         ScanResult result;
         try
         {
@@ -107,7 +113,15 @@ public static class CliHost
             return 1;
         }
 
-        if (!ScanCache.TryLoadAll(cachePath, out var scans, protector) || scans.Count == 0)
+        var loaded = ScanCache.LoadAll(cachePath, protector);
+        if (loaded.Status == ScanCacheLoadStatus.Failed)
+        {
+            error.WriteLine(loaded.Error ?? ScanCache.FormatLoadFailed(cachePath));
+            return 1;
+        }
+
+        var scans = loaded.Scans;
+        if (scans.Count == 0)
         {
             error.WriteLine("No saved scan. Run: InstantFileSearch.Cli scan <folder>");
             return 2;
@@ -134,7 +148,15 @@ public static class CliHost
         string exclusionsPath,
         IByteProtector protector)
     {
-        if (!ScanCache.TryLoadAll(cachePath, out var scans, protector) || scans.Count == 0)
+        var loaded = ScanCache.LoadAll(cachePath, protector);
+        if (loaded.Status == ScanCacheLoadStatus.Failed)
+        {
+            error.WriteLine(loaded.Error ?? ScanCache.FormatLoadFailed(cachePath));
+            return 1;
+        }
+
+        var scans = loaded.Scans;
+        if (scans.Count == 0)
         {
             error.WriteLine("No saved scan.");
             return 2;

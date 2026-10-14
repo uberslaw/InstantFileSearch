@@ -25,6 +25,11 @@ public sealed class FolderNode : INotifyPropertyChanged
     public ScanLocationKind LocationKind { get; set; }
     public TimeSpan ScanDuration { get; set; }
     /// <summary>
+    /// When this scan finished, UTC. Set on the scan root only; nested folders
+    /// and FILES stay default. Used for the tree tooltip and the refresh prompt.
+    /// </summary>
+    public DateTime ScanCompletedUtc { get; set; }
+    /// <summary>
     /// Synthetic child that represents files sitting directly in the parent
     /// folder. Not a real path, scan root, or exclusion target.
     /// </summary>
@@ -34,6 +39,11 @@ public sealed class FolderNode : INotifyPropertyChanged
         Parent is null && ScanDuration > TimeSpan.Zero
             ? ScanLocation.FormatDuration(ScanDuration)
             : "";
+
+    public string ScanTimeTip =>
+        Parent is not null || ScanCompletedUtc == default
+            ? ""
+            : "Scanned " + ScanRefreshPrompt.FormatDoneAt(ScanCompletedUtc);
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

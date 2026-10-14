@@ -228,6 +228,28 @@ public class CliHostTests
         }
     }
 
+    [Fact]
+    public void StatusReportsCorruptCacheInsteadOfNoScan()
+    {
+        var cache = Path.Combine(Path.GetTempPath(), "ifs-cli-bad-" + Guid.NewGuid().ToString("N") + ".bin");
+        var exclusions = Path.Combine(Path.GetTempPath(), "ifs-cli-bad-ex-" + Guid.NewGuid().ToString("N") + ".bin");
+        File.WriteAllText(cache, "{ not json");
+        try
+        {
+            Assert.Equal(1, Run(["status"], cache, exclusions, new PassThroughByteProtector(), out _, out var err));
+            Assert.Contains("corrupt", err, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("No saved scan", err, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(cache);
+            if (File.Exists(exclusions))
+            {
+                File.Delete(exclusions);
+            }
+        }
+    }
+
     private static int Run(string[] args, string cache, string exclusions, IByteProtector protector, out string stdout, out string stderr)
     {
         var outWriter = new StringWriter();

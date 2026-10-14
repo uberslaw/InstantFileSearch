@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System.ComponentModel;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -24,6 +25,20 @@ public partial class MainWindow : Window
     private void FolderTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
         Vm.SelectedFolder = e.NewValue as FolderNode;
+    }
+
+    private void FolderTree_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (FindTreeViewItem(e.OriginalSource as DependencyObject) is { DataContext: FolderNode node }
+            && ReferenceEquals(Vm.SelectedFolder, node))
+        {
+            Vm.OfferRefreshFor(node);
+        }
+    }
+
+    private void Window_Closing(object sender, CancelEventArgs e)
+    {
+        Vm.FlushPersist();
     }
 
     private void FolderTree_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)

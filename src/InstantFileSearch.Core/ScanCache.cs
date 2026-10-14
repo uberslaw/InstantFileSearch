@@ -74,6 +74,20 @@ public static class ScanCache
         ProtectedFile.WriteAll(filePath, System.Text.Encoding.UTF8.GetBytes(json), protector);
     }
 
+    public const string LoadFailedStatus =
+        "Could not load saved scans (last-scan.bin). The file may be corrupt or not readable by this Windows user.";
+
+    public static string FormatLoadFailed(string filePath)
+    {
+        var name = string.IsNullOrWhiteSpace(filePath) ? "last-scan.bin" : Path.GetFileName(filePath);
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = "last-scan.bin";
+        }
+
+        return $"Could not load saved scans ({name}). The file may be corrupt or not readable by this Windows user.";
+    }
+
     public static bool TryLoad(string filePath, out ScanResult? result, IByteProtector? protector = null)
     {
         result = null;
@@ -86,40 +100,54 @@ public static class ScanCache
         return true;
     }
 
+    /// <summary>
+    /// True only when at least one scan was parsed. Missing and corrupt files
+    /// both return false — use <see cref="LoadAll"/> when the UI must say so.
+    /// </summary>
     public static bool TryLoadAll(string filePath, out IReadOnlyList<ScanResult> results, IByteProtector? protector = null)
     {
-        results = [];
+        var loaded = LoadAll(filePath, protector);
+        results = loaded.Scans;
+        return loaded.HasScans;
+    }
+
+    public static ScanCacheLoad LoadAll(string filePath, IByteProtector? protector = null)
+    {
         protector ??= ByteProtector.CreateDefault();
         if (string.IsNullOrWhiteSpace(filePath))
         {
-            return false;
+            return ScanCacheLoad.Missing();
         }
 
-        byte[] bytes;
-        if (ProtectedFile.TryReadAll(filePath, protector, out bytes))
+        var primaryExists = File.Exists(filePath);
+        if (ProtectedFile.TryReadAll(filePath, protector, out var bytes))
         {
             // A readable primary file wins, including an empty scan list after
             // the last root was removed. Do not overlay a stale sibling .json.
             if (TryParse(bytes, out var parsed))
             {
-                results = parsed;
-                return parsed.Count > 0;
+                return ScanCacheLoad.Loaded(parsed);
             }
 
-            return false;
+            return ScanCacheLoad.Failed(FormatLoadFailed(filePath));
         }
 
         var legacyJson = Path.ChangeExtension(filePath, ".json");
-        if (!filePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
-            && File.Exists(legacyJson)
+        var legacyExists = !filePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+            && File.Exists(legacyJson);
+        if (legacyExists
             && ProtectedFile.TryReadAll(legacyJson, protector, out bytes)
             && TryParse(bytes, out var legacy))
         {
-            results = legacy;
-            return legacy.Count > 0;
+            return ScanCacheLoad.Loaded(legacy);
         }
 
-        return false;
+        if (primaryExists || legacyExists)
+        {
+            return ScanCacheLoad.Failed(FormatLoadFailed(primaryExists ? filePath : legacyJson));
+        }
+
+        return ScanCacheLoad.Missing();
     }
 
     private static bool SameRoot(ScanResult left, ScanResult right) =>
@@ -186,13 +214,19 @@ public static class ScanCache
                     root.ScanDuration = TimeSpan.FromSeconds(record.DurationSeconds);
                 }
 
+                var completed = record.CompletedUtc == default ? DateTime.UtcNow : record.CompletedUtc;
+                if (root.ScanCompletedUtc == default)
+                {
+                    root.ScanCompletedUtc = completed;
+                }
+
                 parsed.Add(new ScanResult
                 {
                     Root = root,
                     AllFiles = files,
                     Duration = TimeSpan.FromSeconds(Math.Max(0, record.DurationSeconds)),
                     ErrorCount = Math.Max(0, record.ErrorCount),
-                    CompletedUtc = record.CompletedUtc == default ? DateTime.UtcNow : record.CompletedUtc,
+                    CompletedUtc = completed,
                 });
             }
 

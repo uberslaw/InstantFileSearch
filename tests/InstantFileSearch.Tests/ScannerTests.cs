@@ -76,6 +76,7 @@ public class FileScannerTests
             Assert.Equal(3, result.AllFiles.Count);
             Assert.True(result.Duration >= TimeSpan.Zero);
             Assert.Equal(result.Duration, result.Root.ScanDuration);
+            Assert.Equal(result.CompletedUtc, result.Root.ScanCompletedUtc);
             Assert.Contains("(this PC)", result.Root.Name, StringComparison.Ordinal);
             Assert.DoesNotContain("(this PC)", result.Root.Folders[0].Name, StringComparison.Ordinal);
             Assert.False(string.IsNullOrEmpty(result.Root.DurationText));

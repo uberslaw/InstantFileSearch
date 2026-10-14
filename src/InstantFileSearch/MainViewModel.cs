@@ -20,7 +20,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private readonly IFileDeleter _deleter;
     private readonly IFileMover _mover;
     private readonly bool _elevated;
-    private readonly SynchronizationContext? _ui = SynchronizationContext.Current;
+    private SynchronizationContext? _ui;
+    private readonly ScanRefreshSession _refresh = new();
+    private readonly Func<string, bool>? _confirmRefresh;
+    private readonly object _persistLock = new();
+    private Task _persistTask = Task.CompletedTask;
+    private int _persistGeneration;
+    private bool _suppressRefreshPrompt;
     private FolderExclusionSet _exclusions;
     private CancellationTokenSource? _scanCts;
     private CancellationTokenSource? _mergeCts;
@@ -59,12 +65,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IByteProtector? protector = null,
         IFileDeleter? deleter = null,
         IFileMover? mover = null,
-        bool? elevated = null)
+        bool? elevated = null,
+        Func<string, bool>? confirmRefresh = null)
     {
+        _ui = SynchronizationContext.Current;
         _protector = protector ?? ByteProtector.CreateDefault();
         _deleter = deleter ?? new RecycleBinFileDeleter();
         _mover = mover ?? new FileSystemFileMover();
         _elevated = elevated ?? ProcessElevation.IsCurrentProcessElevated();
+        _confirmRefresh = confirmRefresh;
         _cachePath = string.IsNullOrWhiteSpace(cachePath) ? ScanCache.DefaultFilePath : cachePath;
         _exclusionsPath = string.IsNullOrWhiteSpace(exclusionsPath) ? ExclusionStore.DefaultFilePath : exclusionsPath;
         _settingsPath = UiSettingsStore.DefaultFilePath;
@@ -396,10 +405,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
                     ScheduleItemRefresh();
                 }
 
+                OfferRefreshFor(_selectedFolder);
                 return;
             }
 
             ShowFolderContents();
+            OfferRefreshFor(_selectedFolder);
         }
     }
 
@@ -1146,40 +1157,93 @@ public sealed class MainViewModel : INotifyPropertyChanged
             return Task.CompletedTask;
         }
 
+        var path = _cachePath;
+        var protector = _protector;
         return Task.Run(() =>
         {
-            if (!ScanCache.TryLoadAll(_cachePath, out var cached, _protector) || cached.Count == 0)
+            ScanCacheLoad loaded;
+            try
             {
+                loaded = ScanCache.LoadAll(path, protector);
+            }
+            catch (Exception ex)
+            {
+                PostToUi(() =>
+                {
+                    StatusText = ScanCache.FormatLoadFailed(path) + " " + ex.Message;
+                });
                 return;
             }
 
-            PostToUi(() =>
-            {
-                if (IsScanning || _scans.Count > 0)
-                {
-                    return;
-                }
-
-                foreach (var scan in cached)
-                {
-                    UpsertScan(scan);
-                }
-
-                RefreshTree(cached[^1].Root);
-                ScanPath = cached[^1].Root.FullPath;
-                ProgressPath = "";
-                OnPropertyChanged(nameof(LastScanText));
-                NotifyPresentation();
-                StatusText = cached.Count == 1
-                    ? $"Restored {cached[0].Root.Name}."
-                    : $"Restored {cached.Count} scans.";
-            });
+            PostToUi(() => ApplyRestoredCache(loaded));
         });
+    }
+
+    private void ApplyRestoredCache(ScanCacheLoad loaded)
+    {
+        if (IsScanning || _scans.Count > 0)
+        {
+            return;
+        }
+
+        if (loaded.Status == ScanCacheLoadStatus.Failed)
+        {
+            StatusText = loaded.Error ?? ScanCache.FormatLoadFailed(_cachePath);
+            return;
+        }
+
+        if (loaded.Status != ScanCacheLoadStatus.Loaded || loaded.Scans.Count == 0)
+        {
+            return;
+        }
+
+        _suppressRefreshPrompt = true;
+        try
+        {
+            foreach (var scan in loaded.Scans)
+            {
+                UpsertScan(scan);
+                _refresh.MarkLoadedFromCache(scan);
+            }
+
+            var last = loaded.Scans[^1];
+            RefreshTree(last.Root);
+            ScanPath = last.Root.FullPath;
+            ProgressPath = "";
+            OnPropertyChanged(nameof(LastScanText));
+            NotifyPresentation();
+            var when = FormatScanTime(last.CompletedUtc);
+            StatusText = loaded.Scans.Count == 1
+                ? $"Restored {last.Root.Name} from {when}. Click the scan to refresh."
+                : $"Restored {loaded.Scans.Count} scans. Last scan {when}. Click a scan to refresh.";
+        }
+        catch (Exception ex)
+        {
+            StatusText = ScanCache.FormatLoadFailed(_cachePath) + " " + ex.Message;
+        }
+        finally
+        {
+            _suppressRefreshPrompt = false;
+        }
     }
 
     private void ApplyCompletedScan(ScanResult result, bool persist, bool restored)
     {
+        if (result.Root.ScanCompletedUtc == default)
+        {
+            result.Root.ScanCompletedUtc = result.CompletedUtc == default ? DateTime.UtcNow : result.CompletedUtc;
+        }
+
         UpsertScan(result);
+        if (restored)
+        {
+            _refresh.MarkLoadedFromCache(result);
+        }
+        else
+        {
+            _refresh.MarkFreshThisSession(result);
+        }
+
         result.Root.IsExpanded = true;
         RefreshTree(result.Root);
         ScanPath = result.Root.FullPath;
@@ -1190,7 +1254,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var when = FormatScanTime(result.CompletedUtc);
         var elapsed = ScanLocation.FormatDuration(result.Duration);
         StatusText = restored
-            ? $"Restored {result.Root.Name} from {when} ({elapsed}). Scan again to refresh."
+            ? $"Restored {result.Root.Name} from {when} ({elapsed}). Click the scan to refresh."
             : $"Scan complete in {elapsed} at {when}. {_scans.Count} location(s) in the tree.";
 
         if (persist)
@@ -1323,23 +1387,124 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         var path = _cachePath;
         var snapshot = _scans.ToList();
-        _ = Task.Run(() =>
+        var generation = Interlocked.Increment(ref _persistGeneration);
+        lock (_persistLock)
         {
-            try
+            _persistTask = PersistAfterAsync(_persistTask, snapshot, path, generation);
+        }
+    }
+
+    private async Task PersistAfterAsync(
+        Task previous,
+        List<ScanResult> snapshot,
+        string path,
+        int generation)
+    {
+        try
+        {
+            await previous.ConfigureAwait(false);
+        }
+        catch
+        {
+            // A previous save failure must not block this snapshot.
+        }
+
+        if (generation != Volatile.Read(ref _persistGeneration))
+        {
+            return;
+        }
+
+        try
+        {
+            await Task.Run(() => ScanCache.SaveAll(snapshot, path, _protector)).ConfigureAwait(false);
+        }
+        catch
+        {
+            PostToUi(() =>
             {
-                ScanCache.SaveAll(snapshot, path, _protector);
-            }
-            catch
-            {
-                PostToUi(() =>
+                if (!IsScanning)
                 {
-                    if (!IsScanning)
-                    {
-                        StatusText = "Scan complete, but saving the cache failed. Results are only in this session.";
-                    }
-                });
-            }
-        });
+                    StatusText = "Scan complete, but saving the cache failed. Results are only in this session.";
+                }
+            });
+        }
+    }
+
+    /// <summary>
+    /// Wait for the latest queued cache write, then write the current list
+    /// again. Close after a scan used to kill the fire-and-forget Task.Run
+    /// before last-scan.bin was replaced.
+    /// </summary>
+    public void FlushPersist()
+    {
+        Task pending;
+        lock (_persistLock)
+        {
+            pending = _persistTask;
+        }
+
+        try
+        {
+            pending.Wait(TimeSpan.FromSeconds(60));
+        }
+        catch
+        {
+            // Still attempt a last write below when this session touched the cache.
+        }
+
+        // Do not create or overwrite last-scan.bin with an empty list just
+        // because restore has not posted yet — that wipe is how a close
+        // during load would "lose" the DB.
+        if (Volatile.Read(ref _persistGeneration) == 0 && _scans.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            ScanCache.SaveAll(_scans.ToList(), _cachePath, _protector);
+        }
+        catch
+        {
+            // Closing; the in-session tree is gone either way.
+        }
+    }
+
+    public void OfferRefreshFor(FolderNode? node)
+    {
+        if (_suppressRefreshPrompt || IsBusy || node is null)
+        {
+            return;
+        }
+
+        var scan = FindScan(node);
+        if (scan is null)
+        {
+            return;
+        }
+
+        var completed = node.ScanCompletedUtc != default ? node.ScanCompletedUtc : scan.CompletedUtc;
+        var refresh = ScanRefreshPrompt.TryAsk(_refresh, node, completed, ConfirmRefresh);
+        if (refresh)
+        {
+            ScanPath = node.FullPath;
+            _ = ScanAsync();
+        }
+    }
+
+    private bool ConfirmRefresh(string message)
+    {
+        if (_confirmRefresh is not null)
+        {
+            return _confirmRefresh(message);
+        }
+
+        return MessageBox.Show(
+            message,
+            ScanRefreshPrompt.Title,
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question,
+            MessageBoxResult.No) == MessageBoxResult.Yes;
     }
 
     private bool TryGetSafeOpenPath(out string fullPath) =>
@@ -1545,17 +1710,18 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private void PostToUi(Action action)
     {
-        if (_ui is null || SynchronizationContext.Current == _ui)
+        var ui = _ui ?? SynchronizationContext.Current;
+        if (ui is null || SynchronizationContext.Current == ui)
         {
             action();
             return;
         }
 
-        _ui.Post(_ => action(), null);
+        ui.Post(_ => action(), null);
     }
 
     private static string FormatScanTime(DateTime utc) =>
-        (utc == default ? DateTime.UtcNow : utc).ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+        ScanRefreshPrompt.FormatDoneAt(utc);
 
     private static EntryRow ToRow(SearchHit hit)
     {

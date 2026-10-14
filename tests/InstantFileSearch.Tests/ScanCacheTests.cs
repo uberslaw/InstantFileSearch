@@ -25,6 +25,7 @@ public class ScanCacheTests
             Assert.Equal(original.AllFiles.Count, loaded.AllFiles.Count);
             Assert.Equal(original.ErrorCount, loaded.ErrorCount);
             Assert.Equal(original.CompletedUtc, loaded.CompletedUtc, TimeSpan.FromSeconds(1));
+            Assert.Equal(original.CompletedUtc, loaded.Root.ScanCompletedUtc, TimeSpan.FromSeconds(1));
             Assert.Equal("huge", loaded.Root.Folders[0].Name);
             Assert.Same(loaded.Root, loaded.Root.Folders[0].Parent);
             Assert.Same(loaded.Root, loaded.AllFiles.Single(f => f.Name == "readme.txt").Parent);
@@ -143,6 +144,87 @@ public class ScanCacheTests
             if (File.Exists(siblingJson))
             {
                 File.Delete(siblingJson);
+            }
+        }
+    }
+
+    [Fact]
+    public void ClosingEquivalentSaveAfterScanReloadsOnNextLaunch()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ifs-close-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        File.WriteAllText(Path.Combine(root, "keep.txt"), "keep");
+        var cache = Path.Combine(Path.GetTempPath(), "ifs-close-" + Guid.NewGuid().ToString("N") + ".bin");
+        var protector = new PassThroughByteProtector();
+        try
+        {
+            var scanned = new FileScanner().Scan(root);
+            // Same write FlushPersist does after a scan when the window closes.
+            ScanCache.SaveAll([scanned], cache, protector);
+
+            var loaded = ScanCache.LoadAll(cache, protector);
+            Assert.Equal(ScanCacheLoadStatus.Loaded, loaded.Status);
+            Assert.True(loaded.HasScans);
+            Assert.Single(loaded.Scans);
+            Assert.Equal(scanned.Root.FullPath, loaded.Scans[0].Root.FullPath);
+            Assert.Equal(scanned.AllFiles.Count, loaded.Scans[0].AllFiles.Count);
+            Assert.Equal(scanned.CompletedUtc, loaded.Scans[0].CompletedUtc, TimeSpan.FromSeconds(1));
+            Assert.Contains("Scanned ", loaded.Scans[0].Root.ScanTimeTip, StringComparison.Ordinal);
+            Assert.Contains(
+                ScanRefreshPrompt.FormatDoneAt(scanned.CompletedUtc),
+                loaded.Scans[0].Root.ScanTimeTip,
+                StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+            if (File.Exists(cache))
+            {
+                File.Delete(cache);
+            }
+        }
+    }
+
+    [Fact]
+    public void LoadAllDistinguishesMissingCorruptAndEmpty()
+    {
+        var missing = Path.Combine(Path.GetTempPath(), "ifs-none-" + Guid.NewGuid().ToString("N") + ".bin");
+        var missingLoad = ScanCache.LoadAll(missing, new PassThroughByteProtector());
+        Assert.Equal(ScanCacheLoadStatus.Missing, missingLoad.Status);
+        Assert.False(missingLoad.HasScans);
+        Assert.Empty(missingLoad.Scans);
+
+        var bad = Path.Combine(Path.GetTempPath(), "ifs-badload-" + Guid.NewGuid().ToString("N") + ".bin");
+        File.WriteAllText(bad, "{ not json");
+        try
+        {
+            var failed = ScanCache.LoadAll(bad, new PassThroughByteProtector());
+            Assert.Equal(ScanCacheLoadStatus.Failed, failed.Status);
+            Assert.False(failed.HasScans);
+            Assert.Contains("corrupt", failed.Error, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(Path.GetFileName(bad), failed.Error, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(bad);
+        }
+
+        var empty = Path.Combine(Path.GetTempPath(), "ifs-emptyload-" + Guid.NewGuid().ToString("N") + ".bin");
+        try
+        {
+            ScanCache.SaveAll([], empty, new PassThroughByteProtector());
+            var loaded = ScanCache.LoadAll(empty, new PassThroughByteProtector());
+            Assert.Equal(ScanCacheLoadStatus.Loaded, loaded.Status);
+            Assert.False(loaded.HasScans);
+            Assert.Empty(loaded.Scans);
+            Assert.False(ScanCache.TryLoadAll(empty, out var viaTry, new PassThroughByteProtector()));
+            Assert.Empty(viaTry);
+        }
+        finally
+        {
+            if (File.Exists(empty))
+            {
+                File.Delete(empty);
             }
         }
     }

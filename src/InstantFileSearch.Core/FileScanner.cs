@@ -50,7 +50,9 @@ public sealed class FileScanner
         SortTree(root);
         FolderFilesNode.Attach(root);
         clock.Stop();
+        var completed = DateTime.UtcNow;
         root.ScanDuration = clock.Elapsed;
+        root.ScanCompletedUtc = completed;
         root.LocationKind = location;
 
         return new ScanResult
@@ -59,7 +61,7 @@ public sealed class FileScanner
             AllFiles = files,
             Duration = clock.Elapsed,
             ErrorCount = errorCount,
-            CompletedUtc = DateTime.UtcNow,
+            CompletedUtc = completed,
         };
     }
 

@@ -8,7 +8,8 @@
         AllowDrop="True"
         Drop="Window_Drop"
         DragOver="Window_DragOver"
-        PreviewKeyDown="Window_PreviewKeyDown">
+        PreviewKeyDown="Window_PreviewKeyDown"
+        Closing="Window_Closing">
     <Window.InputBindings>
         <KeyBinding Key="O" Modifiers="Control" Command="{Binding BrowseCommand}"/>
         <KeyBinding Key="F5" Command="{Binding ScanCommand}"/>
@@ -263,6 +264,7 @@
                           ItemsSource="{Binding TreeRoots}"
                           SelectedItemChanged="FolderTree_SelectedItemChanged"
                           PreviewMouseRightButtonDown="FolderTree_PreviewMouseRightButtonDown"
+                          PreviewMouseLeftButtonUp="FolderTree_PreviewMouseLeftButtonUp"
                           VirtualizingStackPanel.IsVirtualizing="True"
                           VirtualizingStackPanel.VirtualizationMode="Standard">
                     <TreeView.ContextMenu>
@@ -320,7 +322,7 @@
                     </TreeView.ContextMenu>
                     <TreeView.ItemTemplate>
                         <HierarchicalDataTemplate ItemsSource="{Binding TreeChildren}">
-                            <Grid Margin="0,1">
+                            <Grid Margin="0,1" ToolTip="{Binding ScanTimeTip}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
