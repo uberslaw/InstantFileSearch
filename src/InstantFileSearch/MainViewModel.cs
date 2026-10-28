@@ -23,6 +23,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private SynchronizationContext? _ui;
     private readonly ScanRefreshSession _refresh = new();
     private readonly Func<string, bool>? _confirmRefresh;
+    private readonly Func<string, bool>? _confirmDeleteHistory;
+    private readonly ScanHistoryStore _history;
     private readonly object _persistLock = new();
     private Task _persistTask = Task.CompletedTask;
     private int _persistGeneration;
@@ -48,6 +50,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private string _modifiedFromText = "";
     private string _modifiedToText = "";
     private string _searchScope = SearchScopes.AllScans;
+    private string _historyFilter = "";
+    private ScanHistoryEntry? _selectedHistoryEntry;
     private string _matchMode = "Name or path";
     private bool _isAdvancedOpen;
     private string _statusText = "Choose a folder and scan. Drop a folder on the window to start. UNC shares can be pasted in the path box.";
@@ -68,7 +72,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IFileDeleter? deleter = null,
         IFileMover? mover = null,
         bool? elevated = null,
-        Func<string, bool>? confirmRefresh = null)
+        Func<string, bool>? confirmRefresh = null,
+        ScanHistoryStore? history = null,
+        Func<string, bool>? confirmDeleteHistory = null)
     {
         _ui = SynchronizationContext.Current;
         _protector = protector ?? ByteProtector.CreateDefault();
@@ -76,6 +82,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _mover = mover ?? new FileSystemFileMover();
         _elevated = elevated ?? ProcessElevation.IsCurrentProcessElevated();
         _confirmRefresh = confirmRefresh;
+        _confirmDeleteHistory = confirmDeleteHistory;
+        _history = history ?? new ScanHistoryStore();
         _cachePath = string.IsNullOrWhiteSpace(cachePath) ? ScanCache.DefaultFilePath : cachePath;
         _exclusionsPath = string.IsNullOrWhiteSpace(exclusionsPath) ? ExclusionStore.DefaultFilePath : exclusionsPath;
         _settingsPath = UiSettingsStore.DefaultFilePath;
@@ -92,6 +100,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         RemoveScanCommand = new RelayCommand(RemoveSelectedScan, CanRemoveSelectedScan);
         RemoveExclusionCommand = new RelayCommand(RemoveSelectedExclusion, () => SelectedExclusion is not null);
         ShowExclusionsCommand = new RelayCommand(ShowExclusions);
+        ShowHistoryCommand = new RelayCommand(ShowHistory);
+        LoadHistoryCommand = new RelayCommand(LoadSelectedHistory, CanLoadSelectedHistory);
+        DeleteHistoryCommand = new RelayCommand(DeleteSelectedHistory, CanDeleteSelectedHistory);
         DeleteCommand = new RelayCommand(DeleteSelected, CanDeleteSelected);
         MergeIntoCommand = new RelayCommand(MergeInto, CanMergeSelected);
         MergeIntoSelectedCommand = new RelayCommand(MergeIntoSelected, CanMergeSelected);
@@ -126,6 +137,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public ICommand RemoveScanCommand { get; }
     public ICommand RemoveExclusionCommand { get; }
     public ICommand ShowExclusionsCommand { get; }
+    public ICommand ShowHistoryCommand { get; }
+    public ICommand LoadHistoryCommand { get; }
+    public ICommand DeleteHistoryCommand { get; }
     public ICommand DeleteCommand { get; }
     public ICommand MergeIntoCommand { get; }
     public ICommand MergeIntoSelectedCommand { get; }
@@ -229,7 +243,26 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public IReadOnlyList<string> SizeUnitOptions { get; } = ["B", "KB", "MB", "GB", "TB"];
 
     public IReadOnlyList<string> ScopeOptions { get; } =
-        [SearchScopes.AllScans, SearchScopes.CurrentScan, SearchScopes.SelectedFolder];
+        [SearchScopes.AllScans, SearchScopes.CurrentScan, SearchScopes.AllPrevious, SearchScopes.SelectedFolder];
+
+    public string SearchScopeTip => ResultsUi.SearchScopeTip;
+
+    public string RemoveFromListTip => ResultsUi.RemoveFromListTip;
+
+    public string LastPresentHeader => ResultsUi.LastPresentHeader;
+
+    public string HistoryWindowTitle => ResultsUi.HistoryWindowTitle;
+
+    public string HistoryWindowIntro => ResultsUi.HistoryWindowIntro;
+
+    public string HistoryFilterPlaceholder => ResultsUi.HistoryFilterPlaceholder;
+
+    public string HistoryEmptyText =>
+        _history.Count == 0 ? ResultsUi.HistoryEmpty : ResultsUi.HistoryNoneMatch;
+
+    public bool IsHistoryEmpty => HistoryEntries.Count == 0;
+
+    public ObservableCollection<ScanHistoryEntry> HistoryEntries { get; } = [];
 
     public IReadOnlyList<string> MatchModeOptions { get; } = ["Name or path", "Name", "Path"];
 
@@ -244,8 +277,6 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public string ExtensionBoxTip => ResultsUi.ExtensionBoxTip;
 
     public string RegexModeTip => ResultsUi.RegexModeTip;
-
-    public string SearchScopeTip => ResultsUi.SearchScopeTip;
 
     public IReadOnlyList<string> TreeSortOptions => TreeSort.Labels;
 
@@ -364,6 +395,31 @@ public sealed class MainViewModel : INotifyPropertyChanged
             if (SetField(ref _matchMode, string.IsNullOrWhiteSpace(value) ? "Name or path" : value))
             {
                 ScheduleItemRefresh();
+            }
+        }
+    }
+
+    public string HistoryFilter
+    {
+        get => _historyFilter;
+        set
+        {
+            if (SetField(ref _historyFilter, value ?? ""))
+            {
+                RefreshHistoryEntries();
+            }
+        }
+    }
+
+    public ScanHistoryEntry? SelectedHistoryEntry
+    {
+        get => _selectedHistoryEntry;
+        set
+        {
+            if (SetField(ref _selectedHistoryEntry, value))
+            {
+                ((RelayCommand)LoadHistoryCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)DeleteHistoryCommand).RaiseCanExecuteChanged();
             }
         }
     }
@@ -508,7 +564,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     public string EmptyStateText => ResultsUi.EmptyState(
-        _scans.Count > 0,
+        _scans.Count > 0 || (IsHistoryScope && _history.Count > 0),
         IsSearchActive,
         Items.Count,
         filesAtLevel: SelectedFolder?.IsFilesNode == true,
@@ -517,7 +573,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public bool IsEmptyStateVisible => ResultsUi.ShowEmptyState(Items.Count);
 
     public string ContentsHeaderText => ResultsUi.ContentsHeader(
-        _scans.Count > 0,
+        _scans.Count > 0 || (IsHistoryScope && _history.Count > 0),
         IsSearchActive,
         Items.Count,
         filesAtLevel: SelectedFolder?.IsFilesNode == true,
@@ -531,7 +587,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             if (SelectedEntry is not null)
             {
-                return ResultsUi.DetailsMeta(SelectedEntry.Size, SelectedEntry.Modified, SelectedEntry.IsFolder);
+                return ResultsUi.DetailsMeta(
+                    SelectedEntry.Size,
+                    SelectedEntry.Modified,
+                    SelectedEntry.IsFolder,
+                    isFilesNode: false,
+                    lastPresentUtc: SelectedEntry.LastPresentUtc);
             }
 
             if (SelectedFolder is not null)
@@ -852,6 +913,107 @@ public sealed class MainViewModel : INotifyPropertyChanged
         window.ShowDialog();
     }
 
+    public void ShowHistory()
+    {
+        RefreshHistoryEntries();
+        var window = new ScanHistoryWindow
+        {
+            Owner = Application.Current?.MainWindow,
+            DataContext = this,
+        };
+        window.ShowDialog();
+    }
+
+    private void RefreshHistoryEntries()
+    {
+        var selectedId = SelectedHistoryEntry?.Id;
+        HistoryEntries.Clear();
+        foreach (var entry in _history.List(HistoryFilter))
+        {
+            HistoryEntries.Add(entry);
+        }
+
+        SelectedHistoryEntry = selectedId is { } id
+            ? HistoryEntries.FirstOrDefault(entry => entry.Id == id)
+            : HistoryEntries.FirstOrDefault();
+        OnPropertyChanged(nameof(HistoryEmptyText));
+        OnPropertyChanged(nameof(IsHistoryEmpty));
+        ((RelayCommand)LoadHistoryCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)DeleteHistoryCommand).RaiseCanExecuteChanged();
+    }
+
+    private bool CanLoadSelectedHistory() =>
+        !IsBusy && SelectedHistoryEntry is not null && _history.Find(SelectedHistoryEntry.Id) is not null;
+
+    public void LoadSelectedHistory()
+    {
+        if (!CanLoadSelectedHistory() || SelectedHistoryEntry is null)
+        {
+            return;
+        }
+
+        var snapshot = _history.Find(SelectedHistoryEntry.Id);
+        if (snapshot is null)
+        {
+            return;
+        }
+
+        if (!_scans.Any(scan => scan.Id == snapshot.Id))
+        {
+            _scans.Add(snapshot);
+        }
+
+        _refresh.MarkLoadedFromCache(snapshot);
+        snapshot.Root.IsExpanded = true;
+        RefreshTree(snapshot.Root);
+        ScanPath = snapshot.Root.FullPath;
+        NotifyPresentation();
+        StatusText = $"Loaded {snapshot.Root.TreeLabel}. Remove from list unloads it; Delete in history removes the snapshot.";
+    }
+
+    private bool CanDeleteSelectedHistory() =>
+        !IsBusy && SelectedHistoryEntry is not null && _history.Find(SelectedHistoryEntry.Id) is not null;
+
+    public void DeleteSelectedHistory()
+    {
+        if (!CanDeleteSelectedHistory() || SelectedHistoryEntry is null)
+        {
+            return;
+        }
+
+        var entry = SelectedHistoryEntry;
+        var message = ResultsUi.DeleteHistoryConfirm(entry.Path, entry.CompletedLocalText);
+        var confirmed = _confirmDeleteHistory is not null
+            ? _confirmDeleteHistory(message)
+            : MessageBox.Show(
+                message,
+                ResultsUi.DeleteHistoryConfirmTitle,
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                MessageBoxResult.No) == MessageBoxResult.Yes;
+        if (!confirmed)
+        {
+            return;
+        }
+
+        if (!_history.Delete(entry.Id))
+        {
+            StatusText = "That snapshot is no longer in history.";
+            RefreshHistoryEntries();
+            return;
+        }
+
+        var remaining = _scans.Where(scan => scan.Id != entry.Id).ToList();
+        _scans.Clear();
+        _scans.AddRange(remaining);
+        PersistHistory();
+        RefreshTree(_scans.LastOrDefault()?.Root);
+        RefreshHistoryEntries();
+        ScheduleItemRefresh();
+        NotifyPresentation();
+        StatusText = $"Deleted snapshot of {entry.Path} from {entry.CompletedLocalText} from the cache.";
+    }
+
     private bool CanDeleteSelected() =>
         UiInteractionMode.CanDeleteFile(
             IsEditMode,
@@ -1154,14 +1316,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var remaining = scan.AllFiles
             .Where(file => !LocalPathGuard.IsSameOrUnder(file.FullPath, node.FullPath))
             .ToList();
-        ReplaceScan(scan, new ScanResult
-        {
-            Root = scan.Root,
-            AllFiles = remaining,
-            Duration = scan.Duration,
-            ErrorCount = scan.ErrorCount,
-            CompletedUtc = scan.CompletedUtc,
-        });
+        ReplaceScan(scan, scan.WithFiles(remaining));
 
         RefreshTree(parent);
         PersistAllScans();
@@ -1236,22 +1391,28 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _suppressRefreshPrompt = true;
         try
         {
-            foreach (var scan in loaded.Scans)
+            _history.ReplaceAll(loaded.Scans);
+            RefreshHistoryEntries();
+            var newest = _history.NewestPerPath();
+            foreach (var scan in newest)
             {
                 UpsertScan(scan);
                 _refresh.MarkLoadedFromCache(scan);
             }
 
-            var last = loaded.Scans[^1];
+            var last = newest.Count == 0 ? loaded.Scans[^1] : newest[^1];
             RefreshTree(last.Root);
             ScanPath = last.Root.FullPath;
             ProgressPath = "";
             OnPropertyChanged(nameof(LastScanText));
             NotifyPresentation();
             var when = FormatScanTime(last.CompletedUtc);
-            StatusText = loaded.Scans.Count == 1
-                ? $"Restored {last.Root.Name} from {when}. Click the scan to refresh."
-                : $"Restored {loaded.Scans.Count} scans. Last scan {when}. Click a scan to refresh.";
+            var extra = _history.Count - newest.Count;
+            StatusText = newest.Count == 1
+                ? extra > 0
+                    ? $"Restored {last.Root.TreeLabel}. {extra} older snapshot(s) in Scan history."
+                    : $"Restored {last.Root.Name} from {when}. Click the scan to refresh."
+                : $"Restored {newest.Count} scans. Last scan {when}. Click a scan to refresh.";
         }
         catch (Exception ex)
         {
@@ -1268,6 +1429,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
         if (result.Root.ScanCompletedUtc == default)
         {
             result.Root.ScanCompletedUtc = result.CompletedUtc == default ? DateTime.UtcNow : result.CompletedUtc;
+        }
+
+        if (!restored)
+        {
+            result = _history.Append(result);
+            RefreshHistoryEntries();
         }
 
         UpsertScan(result);
@@ -1290,12 +1457,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var when = FormatScanTime(result.CompletedUtc);
         var elapsed = ScanLocation.FormatDuration(result.Duration);
         StatusText = restored
-            ? $"Restored {result.Root.Name} from {when} ({elapsed}). Click the scan to refresh."
-            : $"Scan complete in {elapsed} at {when}. {_scans.Count} location(s) in the tree.";
+            ? $"Restored {result.Root.TreeLabel} ({elapsed}). Click the scan to refresh."
+            : $"Scan complete in {elapsed} at {when}. {_scans.Count} location(s) in the tree, {_history.Count} snapshot(s) saved.";
 
         if (persist)
         {
-            PersistAllScans();
+            PersistHistory();
             try
             {
                 ScanLog.Append(result);
@@ -1321,6 +1488,25 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             _scans[index] = updated;
         }
+
+        if (updated.Id == Guid.Empty && previous.Id != Guid.Empty)
+        {
+            updated = new ScanResult
+            {
+                Id = previous.Id,
+                Root = updated.Root,
+                AllFiles = updated.AllFiles,
+                Duration = updated.Duration,
+                ErrorCount = updated.ErrorCount,
+                CompletedUtc = updated.CompletedUtc,
+            };
+            if (index >= 0)
+            {
+                _scans[index] = updated;
+            }
+        }
+
+        _history.ReplaceSnapshot(updated);
     }
 
     private void RefreshTree(FolderNode? select)
@@ -1407,22 +1593,23 @@ public sealed class MainViewModel : INotifyPropertyChanged
             return;
         }
 
-        var name = SelectedFolder!.Name;
+        var name = SelectedFolder!.TreeLabel;
         _scans.Clear();
         _scans.AddRange(remaining);
         RefreshTree(_scans.LastOrDefault()?.Root);
-        PersistAllScans();
         ScheduleItemRefresh();
         NotifyPresentation();
         StatusText = _scans.Count == 0
-            ? "Removed from list. Tree is empty."
-            : $"Removed {name} from the list. {_scans.Count} location(s) remain.";
+            ? "Removed from list. Snapshot stays in Scan history."
+            : $"Removed {name} from the list. {_scans.Count} location(s) remain. Snapshot stays in Scan history.";
     }
 
-    private void PersistAllScans()
+    private void PersistAllScans() => PersistHistory();
+
+    private void PersistHistory()
     {
         var path = _cachePath;
-        var snapshot = _scans.ToList();
+        var snapshot = _history.Snapshots.ToList();
         var generation = Interlocked.Increment(ref _persistGeneration);
         lock (_persistLock)
         {
@@ -1490,15 +1677,16 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         // Do not create or overwrite last-scan.bin with an empty list just
         // because restore has not posted yet — that wipe is how a close
-        // during load would "lose" the DB.
-        if (Volatile.Read(ref _persistGeneration) == 0 && _scans.Count == 0)
+        // during load would "lose" the DB. Persist history, not the loaded
+        // tree: Remove from list must not drop older snapshots.
+        if (Volatile.Read(ref _persistGeneration) == 0 && _history.Count == 0)
         {
             return;
         }
 
         try
         {
-            ScanCache.SaveAll(_scans.ToList(), _cachePath, _protector);
+            ScanCache.SaveAll(_history.Snapshots.ToList(), _cachePath, _protector);
         }
         catch
         {
@@ -1576,7 +1764,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool IsCurrentScanScope =>
         string.Equals(SearchScope, SearchScopes.CurrentScan, StringComparison.Ordinal);
 
+    private bool IsHistoryScope =>
+        string.Equals(SearchScope, SearchScopes.AllPrevious, StringComparison.Ordinal);
+
     private SearchScopeKind ActiveSearchScope => SearchScopes.Parse(SearchScope);
+
+    private bool HasSearchIndex =>
+        IsHistoryScope ? _history.Count > 0 : _scans.Count > 0;
 
     private SearchQuery BuildSearchQuery() => new()
     {
@@ -1605,7 +1799,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _searchCts = null;
 
         var query = BuildSearchQuery();
-        if (!query.HasCriteria || _scans.Count == 0)
+        if (!query.HasCriteria || !HasSearchIndex)
         {
             _searchGeneration++;
             ShowFolderContents();
@@ -1623,27 +1817,56 @@ public sealed class MainViewModel : INotifyPropertyChanged
         try
         {
             await Task.Delay(SearchDebounce, token);
-            var scope = ActiveSearchScope;
-            var files = FolderFilesNode.FilesForSearch(
-                    _scans.SelectMany(scan => scan.AllFiles),
-                    SelectedFolder,
-                    scope)
-                .ToList();
-            var folders = FolderFilesNode.FoldersForSearch(
-                    _scans.Select(scan => scan.Root),
-                    SelectedFolder,
-                    scope)
-                .ToList();
-            if (generation != _searchGeneration)
+            List<EntryRow> rows;
+            if (IsHistoryScope)
             {
-                return;
-            }
+                var history = _history.Snapshots.ToList();
+                if (history.Count == 0 || generation != _searchGeneration)
+                {
+                    return;
+                }
 
-            var rows = await Task.Run(() =>
+                rows = await Task.Run(
+                    () => ScanHistorySearch.Search(history, query).Select(ToRow).ToList(),
+                    token);
+            }
+            else if (ActiveSearchScope == SearchScopeKind.AllScans)
             {
-                var matches = FileNameSearch.FilterHits(folders, files, query);
-                return matches.Select(ToRow).ToList();
-            }, token);
+                var loaded = _scans.ToList();
+                if (loaded.Count == 0 || generation != _searchGeneration)
+                {
+                    return;
+                }
+
+                rows = await Task.Run(
+                    () => ScanHistorySearch.Search(loaded, query).Select(ToRow).ToList(),
+                    token);
+            }
+            else
+            {
+                var scope = ActiveSearchScope;
+                var files = FolderFilesNode.FilesForSearch(
+                        _scans.SelectMany(scan => scan.AllFiles),
+                        SelectedFolder,
+                        scope)
+                    .ToList();
+                var folders = FolderFilesNode.FoldersForSearch(
+                        _scans.Select(scan => scan.Root),
+                        SelectedFolder,
+                        scope)
+                    .ToList();
+                if (generation != _searchGeneration)
+                {
+                    return;
+                }
+
+                var lastPresent = FindScan(SelectedFolder)?.CompletedUtc ?? default;
+                rows = await Task.Run(() =>
+                {
+                    var matches = FileNameSearch.FilterHits(folders, files, query);
+                    return matches.Select(hit => ToRow(hit.WithLastPresent(lastPresent))).ToList();
+                }, token);
+            }
 
             if (generation != _searchGeneration)
             {
@@ -1688,17 +1911,18 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
 
         var parentSize = SelectedFolder.Size;
+        var lastPresent = FindScan(SelectedFolder)?.CompletedUtc ?? default;
         var folders = FolderFilesNode.ContentFolders(SelectedFolder);
         var files = FolderFilesNode.ContentFiles(SelectedFolder);
         var rows = new List<EntryRow>(folders.Count + files.Count);
         foreach (var folder in folders)
         {
-            rows.Add(ToFolderRow(folder, parentSize));
+            rows.Add(ToFolderRow(folder, parentSize, lastPresent));
         }
 
         foreach (var file in files)
         {
-            rows.Add(ToFileRow(file, parentSize));
+            rows.Add(ToFileRow(file, parentSize, lastPresent));
         }
 
         ReplaceItems(rows);
@@ -1754,6 +1978,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ((RelayCommand)MergeIntoCommand).RaiseCanExecuteChanged();
         ((RelayCommand)MergeIntoSelectedCommand).RaiseCanExecuteChanged();
         ((RelayCommand)RunAsAdministratorCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)LoadHistoryCommand).RaiseCanExecuteChanged();
+        ((RelayCommand)DeleteHistoryCommand).RaiseCanExecuteChanged();
         OnPropertyChanged(nameof(IsIdle));
         OnPropertyChanged(nameof(IsBusy));
     }
@@ -1777,14 +2003,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         if (hit.IsFolder && hit.Folder is not null)
         {
-            return ToFolderRow(hit.Folder, hit.Folder.Parent?.Size ?? hit.Size);
+            return ToFolderRow(hit.Folder, hit.Folder.Parent?.Size ?? hit.Size, hit.LastPresentUtc);
         }
 
         var file = hit.File ?? throw new InvalidOperationException("File search hit is missing File.");
-        return ToFileRow(file, file.Parent?.Size ?? file.Size);
+        return ToFileRow(file, file.Parent?.Size ?? file.Size, hit.LastPresentUtc);
     }
 
-    private static EntryRow ToFolderRow(FolderNode folder, long parentSize) => new()
+    private static EntryRow ToFolderRow(FolderNode folder, long parentSize, DateTime lastPresentUtc = default) => new()
     {
         Name = folder.Name,
         FullPath = folder.FullPath,
@@ -1794,9 +2020,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Modified = folder.Modified,
         Percent = parentSize <= 0 ? 0 : folder.Size * 100.0 / parentSize,
         Folder = folder,
+        LastPresentUtc = lastPresentUtc,
     };
 
-    private static EntryRow ToFileRow(FileEntry file, long parentSize) => new()
+    private static EntryRow ToFileRow(FileEntry file, long parentSize, DateTime lastPresentUtc = default) => new()
     {
         Name = file.Name,
         FullPath = file.FullPath,
@@ -1806,6 +2033,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Modified = file.Modified,
         Percent = parentSize <= 0 ? 0 : file.Size * 100.0 / parentSize,
         File = file,
+        LastPresentUtc = lastPresentUtc,
     };
 
     private static void TryStart(string path)

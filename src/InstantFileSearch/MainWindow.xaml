@@ -32,7 +32,9 @@
                 <Separator/>
                 <MenuItem Header="Exclude selected folder" Command="{Binding ExcludeFolderCommand}"/>
                 <MenuItem Header="Remove from list" Command="{Binding RemoveScanCommand}"
-                          ToolTip="Removes the selected scan from the list. Does not delete files on disk."/>
+                          ToolTip="{Binding RemoveFromListTip}"/>
+                <MenuItem Header="Scan history…" Command="{Binding ShowHistoryCommand}"
+                          ToolTip="Find, load, or delete previous snapshots. Scanning the same path again keeps the old one here."/>
                 <MenuItem Header="Excluded folders…" Command="{Binding ShowExclusionsCommand}"/>
             </MenuItem>
             <MenuItem Header="_Edit">
@@ -106,6 +108,7 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <TextBox Grid.Column="0"
                              Margin="0,0,10,0"
@@ -121,13 +124,18 @@
                             Content="Scan"
                             Style="{StaticResource AccentButton}"
                             Command="{Binding ScanCommand}"
-                            ToolTip="Scan this folder (F5). Same path replaces that tree root. Does not prompt for UAC."/>
+                            ToolTip="Scan this folder (F5). Same path replaces the tree root; the previous snapshot stays in Scan history. Does not prompt for UAC."/>
                     <Button Grid.Column="3"
+                            Content="History"
+                            Style="{StaticResource ToolbarButton}"
+                            Command="{Binding ShowHistoryCommand}"
+                            ToolTip="Find, load, or delete previous snapshots."/>
+                    <Button Grid.Column="4"
                             Content="Cancel"
                             Style="{StaticResource CancelButton}"
                             Command="{Binding CancelCommand}"
                             ToolTip="Stop the scan (Esc)"/>
-                    <Button Grid.Column="4"
+                    <Button Grid.Column="5"
                             Content="Run as administrator"
                             Style="{StaticResource ToolbarButton}"
                             Margin="0"
@@ -171,7 +179,7 @@
                                   Margin="8,0,0,0"
                                   IsChecked="{Binding IsAdvancedOpen}"
                                   Style="{StaticResource ToolbarToggle}"
-                                  ToolTip="Size, date, Current scan / Selected folder, and name vs path. Ext is next to Search. Not saved."/>
+                                  ToolTip="Size, date, Current scan / All previous scans / Selected folder, and name vs path. Ext is next to Search. Not saved."/>
                     <ToggleButton Grid.Column="4"
                                   Content="Edit"
                                   Margin="8,0,0,0"
@@ -229,7 +237,7 @@
                     <Border Style="{StaticResource FilterGroup}">
                         <StackPanel>
                             <TextBlock Text="SCOPE" Style="{StaticResource FilterCaption}"/>
-                            <ComboBox MinWidth="148"
+                            <ComboBox MinWidth="180"
                                       ItemsSource="{Binding ScopeOptions}"
                                       SelectedItem="{Binding SearchScope}"
                                       ToolTip="{Binding SearchScopeTip}"/>
@@ -327,7 +335,7 @@
                             </MenuItem>
                             <MenuItem Header="Remove from list"
                                       Command="{Binding RemoveScanCommand}"
-                                      ToolTip="Removes this scan from the list. Does not delete files on disk.">
+                                      ToolTip="{Binding RemoveFromListTip}">
                                 <MenuItem.Style>
                                     <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
                                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -360,7 +368,7 @@
                                            Margin="0,0,6,0"
                                            VerticalAlignment="Center"/>
                                 <TextBlock Grid.Column="1"
-                                           Text="{Binding Name}"
+                                           Text="{Binding TreeLabel}"
                                            TextTrimming="CharacterEllipsis"
                                            VerticalAlignment="Center"/>
                                 <Grid Grid.Column="2" Height="8" Margin="4,0" VerticalAlignment="Center">
@@ -526,6 +534,7 @@
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
                             <DataGridTextColumn Header="Modified" Binding="{Binding ModifiedText}" SortMemberPath="Modified" Width="132"/>
+                            <DataGridTextColumn Header="Last present" Binding="{Binding LastPresentText}" SortMemberPath="LastPresentUtc" Width="132"/>
                         </DataGrid.Columns>
                     </DataGrid>
                     <TextBlock Text="{Binding EmptyStateText}"

@@ -10,6 +10,8 @@ public sealed class EntryRow
     public string SizeText => ByteFormatter.ToString(Size);
     public DateTime Modified { get; init; }
     public string ModifiedText => Modified == DateTime.MinValue ? "" : Modified.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+    public DateTime LastPresentUtc { get; init; }
+    public string LastPresentText => ResultsUi.FormatLastPresent(LastPresentUtc);
     public double Percent { get; init; }
     public string PercentText => ResultsUi.FormatPercent(Percent, isRoot: false);
     public FolderNode? Folder { get; init; }

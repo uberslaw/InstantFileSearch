@@ -12,8 +12,25 @@ public sealed class SearchHit
     public bool IsFolder { get; init; }
     public FolderNode? Folder { get; init; }
     public FileEntry? File { get; init; }
+    /// <summary>
+    /// UTC of the latest snapshot that contained this path. Unset when the
+    /// caller did not stamp history (folder-contents browse).
+    /// </summary>
+    public DateTime LastPresentUtc { get; init; }
 
-    public static SearchHit FromFolder(FolderNode folder)
+    public SearchHit WithLastPresent(DateTime completedUtc) => new()
+    {
+        Name = Name,
+        FullPath = FullPath,
+        Size = Size,
+        Modified = Modified,
+        IsFolder = IsFolder,
+        Folder = Folder,
+        File = File,
+        LastPresentUtc = completedUtc,
+    };
+
+    public static SearchHit FromFolder(FolderNode folder, DateTime lastPresentUtc = default)
     {
         ArgumentNullException.ThrowIfNull(folder);
         return new SearchHit
@@ -24,10 +41,11 @@ public sealed class SearchHit
             Modified = folder.Modified,
             IsFolder = true,
             Folder = folder,
+            LastPresentUtc = lastPresentUtc,
         };
     }
 
-    public static SearchHit FromFile(FileEntry file)
+    public static SearchHit FromFile(FileEntry file, DateTime lastPresentUtc = default)
     {
         ArgumentNullException.ThrowIfNull(file);
         return new SearchHit
@@ -38,6 +56,7 @@ public sealed class SearchHit
             Modified = file.Modified,
             IsFolder = false,
             File = file,
+            LastPresentUtc = lastPresentUtc,
         };
     }
 }

@@ -35,6 +35,12 @@ public class ResultsUiTests
         Assert.Equal("File  ·  512 B", ResultsUi.DetailsMeta(512, DateTime.MinValue, isFolder: false));
         Assert.Equal("Files  ·  512 B", ResultsUi.DetailsMeta(512, DateTime.MinValue, isFolder: true, isFilesNode: true));
         Assert.Equal("Folder  ·  1.00 KB  ·  2024-02-03 04:05", ResultsUi.DetailsMeta(1024, new DateTime(2024, 2, 3, 4, 5, 0), isFolder: true));
+        var lastPresent = new DateTime(2026, 4, 5, 6, 7, 0, DateTimeKind.Utc);
+        Assert.Contains(
+            "Last present " + ScanRefreshPrompt.FormatDoneAt(lastPresent),
+            ResultsUi.DetailsMeta(1024, new DateTime(2024, 2, 3, 4, 5, 0), isFolder: false, isFilesNode: false, lastPresentUtc: lastPresent),
+            StringComparison.Ordinal);
+        Assert.Equal("", ResultsUi.FormatLastPresent(default));
     }
 
     [Fact]
@@ -42,6 +48,12 @@ public class ResultsUiTests
     {
         Assert.Equal("Remove from list", ResultsUi.RemoveFromListHeader);
         Assert.Contains("Does not delete files", ResultsUi.RemoveFromListTip, StringComparison.Ordinal);
+        Assert.Contains("Scan history", ResultsUi.RemoveFromListTip, StringComparison.Ordinal);
+        Assert.Contains("Unloads", ResultsUi.RemoveFromListTip, StringComparison.Ordinal);
+        Assert.Contains("Removes this snapshot from the cache", ResultsUi.DeleteFromHistoryTip, StringComparison.Ordinal);
+        Assert.Equal("All previous scans", ResultsUi.ScopeAllPrevious);
+        Assert.Equal("Last present", ResultsUi.LastPresentHeader);
+        Assert.Contains("Last present", ResultsUi.SearchScopeTip, StringComparison.Ordinal);
 
         var root = new FolderNode { Name = "work (this PC)", FullPath = @"C:\work" };
         var nested = new FolderNode { Name = "src", FullPath = @"C:\work\src", Parent = root };

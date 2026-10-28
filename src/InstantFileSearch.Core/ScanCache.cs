@@ -5,7 +5,11 @@ namespace InstantFileSearch;
 
 public static class ScanCache
 {
-    public const int CurrentVersion = 2;
+    public const int CurrentVersion = 3;
+    /// <summary>Oldest snapshots of the same canonical path are dropped first.</summary>
+    public const int DefaultMaxSnapshotsPerPath = 10;
+    /// <summary>Oldest snapshots across every path are dropped after the per-path cap.</summary>
+    public const int DefaultMaxTotalSnapshots = 40;
 
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -20,26 +24,143 @@ public static class ScanCache
             "InstantFileSearch",
             "last-scan.bin");
 
+    /// <summary>
+    /// Session tree: the new snapshot replaces every loaded root of the same
+    /// canonical path. History uses <see cref="AppendHistory"/> instead — a
+    /// rescan must not destroy the previous snapshot.
+    /// </summary>
     public static IReadOnlyList<ScanResult> Upsert(IReadOnlyList<ScanResult>? existing, ScanResult incoming)
     {
         ArgumentNullException.ThrowIfNull(incoming);
         var list = existing?.ToList() ?? [];
-        var index = list.FindIndex(scan => SameRoot(scan, incoming));
-        if (index >= 0)
-        {
-            list[index] = incoming;
-        }
-        else
-        {
-            list.Add(incoming);
-        }
-
+        list.RemoveAll(scan => SameRoot(scan, incoming));
+        list.Add(EnsureId(incoming));
         return list;
     }
 
     /// <summary>
-    /// Drops one scan-root from the in-app list. Nested folders and FILES are ignored
-    /// so a context click cannot delete the parent scan. Does not touch disk files.
+    /// History store: keep the previous snapshot. Caps drop oldest first
+    /// (per canonical path, then total). The incoming snapshot is kept.
+    /// </summary>
+    public static IReadOnlyList<ScanResult> AppendHistory(
+        IReadOnlyList<ScanResult>? existing,
+        ScanResult incoming,
+        int maxPerPath = DefaultMaxSnapshotsPerPath,
+        int maxTotal = DefaultMaxTotalSnapshots)
+    {
+        ArgumentNullException.ThrowIfNull(incoming);
+        if (maxPerPath < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxPerPath), maxPerPath, "Per-path cap must be at least 1.");
+        }
+
+        if (maxTotal < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxTotal), maxTotal, "Total cap must be at least 1.");
+        }
+
+        var snapshot = EnsureId(incoming);
+        var list = existing?.Select(EnsureId).ToList() ?? [];
+        if (snapshot.Id != Guid.Empty)
+        {
+            list.RemoveAll(scan => scan.Id == snapshot.Id);
+        }
+
+        list.Add(snapshot);
+
+        var drop = new HashSet<ScanResult>(ReferenceEqualityComparer.Instance);
+        foreach (var group in list
+                     .Select((scan, index) => (scan, index))
+                     .GroupBy(item => CanonicalKey(item.scan)))
+        {
+            var overflow = group.Count() - maxPerPath;
+            if (overflow <= 0)
+            {
+                continue;
+            }
+
+            foreach (var item in group.OrderBy(x => x.scan.CompletedUtc).ThenBy(x => x.index).Take(overflow))
+            {
+                if (item.scan.Id != snapshot.Id)
+                {
+                    drop.Add(item.scan);
+                }
+            }
+        }
+
+        var kept = list.Where(scan => !drop.Contains(scan)).ToList();
+        if (kept.Count > maxTotal)
+        {
+            var extra = kept.Count - maxTotal;
+            foreach (var item in kept
+                         .Select((scan, index) => (scan, index))
+                         .OrderBy(x => x.scan.CompletedUtc)
+                         .ThenBy(x => x.index))
+            {
+                if (extra <= 0)
+                {
+                    break;
+                }
+
+                if (item.scan.Id == snapshot.Id)
+                {
+                    continue;
+                }
+
+                kept.Remove(item.scan);
+                extra--;
+            }
+        }
+
+        return kept;
+    }
+
+    public static IReadOnlyList<ScanResult> NewestPerPath(IReadOnlyList<ScanResult>? existing)
+    {
+        if (existing is null || existing.Count == 0)
+        {
+            return [];
+        }
+
+        return existing
+            .GroupBy(CanonicalKey)
+            .Select(group => group
+                .OrderByDescending(scan => scan.CompletedUtc)
+                .ThenByDescending(scan => scan.Id)
+                .First())
+            .OrderBy(scan => scan.CompletedUtc)
+            .ToList();
+    }
+
+    public static ScanResult? FindById(IReadOnlyList<ScanResult>? existing, Guid id)
+    {
+        if (existing is null || id == Guid.Empty)
+        {
+            return null;
+        }
+
+        return existing.FirstOrDefault(scan => scan.Id == id);
+    }
+
+    /// <summary>
+    /// Drops one snapshot from history by id. Does not touch files on disk.
+    /// </summary>
+    public static IReadOnlyList<ScanResult> WithoutSnapshot(IReadOnlyList<ScanResult>? existing, Guid id)
+    {
+        var list = existing?.ToList() ?? [];
+        if (id == Guid.Empty)
+        {
+            return list;
+        }
+
+        list.RemoveAll(scan => scan.Id == id);
+        return list;
+    }
+
+    /// <summary>
+    /// Drops one loaded scan-root from the session list by tree-node identity.
+    /// Two snapshots of the same path can be loaded; only this root is unloaded.
+    /// Nested folders and FILES are ignored. Does not touch disk files or history.
     /// </summary>
     public static IReadOnlyList<ScanResult> WithoutRoot(IReadOnlyList<ScanResult>? existing, FolderNode? node)
     {
@@ -49,8 +170,79 @@ public static class ScanCache
             return list;
         }
 
-        list.RemoveAll(scan => SameFolder(scan.Root, node));
+        list.RemoveAll(scan => ReferenceEquals(scan.Root, node));
         return list;
+    }
+
+    public static IReadOnlyList<ScanHistoryEntry> ListEntries(
+        IReadOnlyList<ScanResult>? existing,
+        string? pathFilter = null)
+    {
+        var filter = pathFilter?.Trim() ?? "";
+        var entries = new List<ScanHistoryEntry>();
+        foreach (var scan in existing ?? [])
+        {
+            var entry = ScanHistoryEntry.From(scan);
+            if (filter.Length > 0
+                && entry.Path.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0
+                && entry.Name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                continue;
+            }
+
+            entries.Add(entry);
+        }
+
+        entries.Sort((left, right) =>
+        {
+            var time = right.CompletedUtc.CompareTo(left.CompletedUtc);
+            return time != 0 ? time : string.Compare(left.Path, right.Path, LocalPathGuard.Comparison);
+        });
+        return entries;
+    }
+
+    public static ScanResult EnsureId(ScanResult scan)
+    {
+        ArgumentNullException.ThrowIfNull(scan);
+        if (scan.Id != Guid.Empty)
+        {
+            return scan;
+        }
+
+        return new ScanResult
+        {
+            Id = Guid.NewGuid(),
+            Root = scan.Root,
+            AllFiles = scan.AllFiles,
+            Duration = scan.Duration,
+            ErrorCount = scan.ErrorCount,
+            CompletedUtc = scan.CompletedUtc,
+        };
+    }
+
+    public static string CanonicalKey(ScanResult scan)
+    {
+        ArgumentNullException.ThrowIfNull(scan);
+        return CanonicalKey(scan.Root.FullPath);
+    }
+
+    public static string CanonicalKey(string? fullPath)
+    {
+        if (LocalPathGuard.TryGetFullPath(fullPath, out var path))
+        {
+            return path;
+        }
+
+        return (fullPath ?? "").Trim();
+    }
+
+    private sealed class ReferenceEqualityComparer : IEqualityComparer<ScanResult>
+    {
+        public static readonly ReferenceEqualityComparer Instance = new();
+
+        public bool Equals(ScanResult? x, ScanResult? y) => ReferenceEquals(x, y);
+
+        public int GetHashCode(ScanResult obj) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
     }
 
     public static void Save(ScanResult result, string filePath, IByteProtector? protector = null) =>
@@ -160,13 +352,18 @@ public static class ScanCache
                 && LocalPathGuard.TryGetFullPath(right.FullPath, out var b)
                 && a.Equals(b, LocalPathGuard.Comparison)));
 
-    private static ScanRecord ToRecord(ScanResult result) => new()
+    private static ScanRecord ToRecord(ScanResult result)
     {
-        CompletedUtc = result.CompletedUtc == default ? DateTime.UtcNow : result.CompletedUtc,
-        DurationSeconds = result.Duration.TotalSeconds,
-        ErrorCount = result.ErrorCount,
-        Root = FromFolder(result.Root),
-    };
+        var snapshot = EnsureId(result);
+        return new ScanRecord
+        {
+            Id = snapshot.Id,
+            CompletedUtc = snapshot.CompletedUtc == default ? DateTime.UtcNow : snapshot.CompletedUtc,
+            DurationSeconds = snapshot.Duration.TotalSeconds,
+            ErrorCount = snapshot.ErrorCount,
+            Root = FromFolder(snapshot.Root),
+        };
+    }
 
     private static bool TryParse(byte[] bytes, out IReadOnlyList<ScanResult> results)
     {
@@ -175,7 +372,7 @@ public static class ScanCache
         {
             var json = System.Text.Encoding.UTF8.GetString(bytes);
             var document = JsonSerializer.Deserialize<ScanCacheDocument>(json, Json);
-            if (document is null || document.Version is not (1 or 2))
+            if (document is null || document.Version is not (1 or 2 or 3))
             {
                 return false;
             }
@@ -222,6 +419,7 @@ public static class ScanCache
 
                 parsed.Add(new ScanResult
                 {
+                    Id = record.Id == Guid.Empty ? Guid.NewGuid() : record.Id,
                     Root = root,
                     AllFiles = files,
                     Duration = TimeSpan.FromSeconds(Math.Max(0, record.DurationSeconds)),
@@ -324,6 +522,7 @@ public static class ScanCache
 
     private sealed class ScanRecord
     {
+        public Guid Id { get; set; }
         public DateTime CompletedUtc { get; set; }
         public double DurationSeconds { get; set; }
         public int ErrorCount { get; set; }

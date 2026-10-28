@@ -14,6 +14,7 @@ public enum SearchScopeKind
     AllScans = 0,
     CurrentScan = 1,
     SelectedFolder = 2,
+    AllPrevious = 3,
 }
 
 public static class SearchScopes
@@ -21,12 +22,14 @@ public static class SearchScopes
     public const string AllScans = "All scans";
     public const string CurrentScan = "Current scan";
     public const string SelectedFolder = "Selected folder";
+    public const string AllPrevious = "All previous scans";
 
     public static SearchScopeKind Parse(string? label) =>
         label switch
         {
             CurrentScan => SearchScopeKind.CurrentScan,
             SelectedFolder => SearchScopeKind.SelectedFolder,
+            AllPrevious => SearchScopeKind.AllPrevious,
             _ => SearchScopeKind.AllScans,
         };
 }

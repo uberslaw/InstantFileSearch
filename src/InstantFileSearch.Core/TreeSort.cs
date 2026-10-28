@@ -98,6 +98,12 @@ public static class TreeSort
             return name;
         }
 
+        var scanned = b.ScanCompletedUtc.CompareTo(a.ScanCompletedUtc);
+        if (scanned != 0)
+        {
+            return scanned;
+        }
+
         return string.Compare(a.FullPath, b.FullPath, StringComparison.OrdinalIgnoreCase);
     }
 

@@ -11,7 +11,33 @@ public static class ResultsUi
     public const string TreeContext = "tree";
     public const string RemoveFromListHeader = "Remove from list";
     public const string RemoveFromListTip =
-        "Removes this scan from the list. Does not delete files on disk.";
+        "Unloads this snapshot from the tree. It stays in Scan history until you Delete it there. Does not delete files on disk.";
+    public const string DeleteFromHistoryHeader = "Delete from history";
+    public const string DeleteFromHistoryTip =
+        "Removes this snapshot from the cache. Files on disk are not deleted. Unload (Remove from list) only hides it from the tree.";
+    public const string LoadFromHistoryHeader = "Load";
+    public const string LoadFromHistoryTip =
+        "Puts this snapshot in the left tree. The label includes the scan date so two scans of the same path stay distinct.";
+    public const string HistoryWindowTitle = "Scan history";
+    public const string HistoryWindowIntro =
+        "Previous scans stay here after you scan the same path again. Load puts a snapshot in the tree. Remove from list unloads it; Delete removes it from this cache. Files on disk are not deleted.";
+    public const string HistoryFilterPlaceholder = "Find by path";
+    public const string HistoryEmpty = "No saved scans yet.";
+    public const string HistoryNoneMatch = "No scans match that path.";
+    public const string DeleteHistoryConfirmTitle = "Delete snapshot?";
+    public const string ScopeAllScans = SearchScopes.AllScans;
+    public const string ScopeAllPrevious = SearchScopes.AllPrevious;
+    public const string ScopeSelectedFolder = SearchScopes.SelectedFolder;
+    public const string ScopeCurrentScan = SearchScopes.CurrentScan;
+    public const string LastPresentHeader = "Last present";
+
+    public static string DeleteHistoryConfirm(string path, string when) =>
+        $"Delete the snapshot of {path} from {when} from the cache?{Environment.NewLine}{Environment.NewLine}Files on disk are not deleted.";
+
+    public static string FormatLastPresent(DateTime lastPresentUtc) =>
+        lastPresentUtc == default || lastPresentUtc == DateTime.MinValue
+            ? ""
+            : ScanRefreshPrompt.FormatDoneAt(lastPresentUtc);
 
     public static bool IsTreeContext(object? parameter) =>
         parameter is string text && text.Equals(TreeContext, StringComparison.OrdinalIgnoreCase);
@@ -92,16 +118,30 @@ public static class ResultsUi
             : $"CONTENTS · {itemCount.ToString("N0", CultureInfo.InvariantCulture)} items";
     }
 
-    public static string DetailsMeta(long size, DateTime modified, bool isFolder, bool isFilesNode = false)
+    public static string DetailsMeta(long size, DateTime modified, bool isFolder, bool isFilesNode = false) =>
+        DetailsMeta(size, modified, isFolder, isFilesNode, lastPresentUtc: default);
+
+    public static string DetailsMeta(
+        long size,
+        DateTime modified,
+        bool isFolder,
+        bool isFilesNode,
+        DateTime lastPresentUtc)
     {
         var kind = isFilesNode ? "Files" : isFolder ? "Folder" : "File";
         var sizeText = ByteFormatter.ToString(size);
+        string text;
         if (modified == default || modified == DateTime.MinValue)
         {
-            return $"{kind}  ·  {sizeText}";
+            text = $"{kind}  ·  {sizeText}";
+        }
+        else
+        {
+            text = $"{kind}  ·  {sizeText}  ·  {modified.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)}";
         }
 
-        return $"{kind}  ·  {sizeText}  ·  {modified.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)}";
+        var lastPresent = FormatLastPresent(lastPresentUtc);
+        return lastPresent.Length == 0 ? text : text + "  ·  Last present " + lastPresent;
     }
 
     public static string? ContextPath(string? entryPath, string? folderPath, bool treeContext) =>
@@ -197,7 +237,7 @@ public static class ResultsUi
         "Quoted phrase: \"cisco zero\" is one term (exact if alone; contains if used with +).\n" +
         "path:Incoming — hits whose full path contains Incoming (/ and \\ are the same). Applies even when Match is Name, and in Regex mode. No wildcards → contains; path:*\\share\\* uses * and ?. Several path: tokens AND together.\n" +
         "Regex toggle: the whole box (minus path: filters) is one .NET regex, IgnoreCase, unanchored unless you write ^ or $. + is a regex quantifier, not AND. Invalid pattern: no crash, status and empty state say so.\n" +
-        "Match Name / Path / Name or path applies to terms and to the regex, not to path:. Ext, scope, size, and date still apply (AND). Empty box + Ext or Advanced filters is allowed.\n" +
+        "Match Name / Path / Name or path applies to terms and to the regex, not to path:. Ext, scope (All scans / Current scan / All previous scans / Selected folder), size, and date still apply (AND). Empty box + Ext or Advanced filters is allowed.\n" +
         "Spaces are not AND. No OR. Ctrl+F or F3.";
 
     public const string SearchMatchTip =
@@ -212,7 +252,7 @@ public static class ResultsUi
         "Off (default): exact name, * ?, + AND, quotes, path:. On: the whole search box is one .NET regex against Name and/or Path (IgnoreCase). path: tokens are still prefix filters. + is not AND. Invalid regex does not crash.";
 
     public const string SearchScopeTip =
-        "All scans: every loaded location. Current scan: the whole selected scan root (nested folder or FILES still uses that root). Selected folder: only that tree node (FILES = direct files). No selection with Current scan or Selected folder: no matches.";
+        "All scans: every loaded location in the left tree. Current scan: the whole selected scan root (nested folder or FILES still uses that root). All previous scans: every stored snapshot, including ones not in the tree. Hits are unique by path; Last present is when that path last appeared in a snapshot. Selected folder: only that tree node (FILES = direct files). No selection with Current scan or Selected folder: no matches.";
 
     public const string InvalidRegexStatus = "The regex pattern is invalid.";
 

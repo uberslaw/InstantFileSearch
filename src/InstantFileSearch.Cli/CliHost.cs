@@ -80,7 +80,7 @@ public static class CliHost
             error.WriteLine(ex.Message);
             return 1;
         }
-        var all = ScanCache.Upsert(existing, result);
+        var all = ScanCache.AppendHistory(existing, result);
         ScanCache.SaveAll(all, cachePath, protector);
         try
         {
@@ -94,7 +94,7 @@ public static class CliHost
         output.WriteLine(result.Root.Name);
         output.WriteLine($"{ByteFormatter.ToString(result.Root.Size)}  {result.Root.FileCount:N0} files  {result.Root.FolderCount:N0} folders  {ScanLocation.FormatDuration(result.Duration)}");
         output.WriteLine("Last scan " + result.CompletedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm"));
-        output.WriteLine($"{all.Count} location(s) saved");
+        output.WriteLine($"{ScanCache.NewestPerPath(all).Count} location(s), {all.Count} snapshot(s) saved");
 
         return 0;
     }
@@ -145,14 +145,12 @@ public static class CliHost
             return 0;
         }
 
-        var matches = FileNameSearch.FilterHits(
-            FolderFilesNode.FoldersForSearch(scans.Select(scan => scan.Root), selected: null, selectedFolderScope: false),
-            scans.SelectMany(scan => scan.AllFiles),
-            search).ToList();
+        var matches = ScanHistorySearch.Search(scans, search).ToList();
         foreach (var hit in matches)
         {
             var kind = hit.IsFolder ? "Folder" : "File";
-            output.WriteLine($"{kind}\t{ByteFormatter.ToString(hit.Size)}\t{hit.FullPath}");
+            var lastPresent = ResultsUi.FormatLastPresent(hit.LastPresentUtc);
+            output.WriteLine($"{kind}\t{ByteFormatter.ToString(hit.Size)}\t{hit.FullPath}\t{lastPresent}");
         }
 
         output.WriteLine($"{matches.Count} match(es)");
@@ -227,11 +225,11 @@ public static class CliHost
         }
 
         var exclusions = ExclusionStore.Load(exclusionsPath, protector);
-        output.WriteLine($"{scans.Count} location(s)");
-        foreach (var scan in scans)
+        output.WriteLine($"{scans.Count} snapshot(s)");
+        foreach (var scan in ScanCache.ListEntries(scans))
         {
-            output.WriteLine(scan.Root.Name);
-            output.WriteLine($"  {ByteFormatter.ToString(scan.Root.Size)}  {scan.Root.FileCount:N0} files  {ScanLocation.FormatDuration(scan.Duration)}  {scan.CompletedUtc.ToLocalTime():yyyy-MM-dd HH:mm}");
+            output.WriteLine(scan.TreeLabel);
+            output.WriteLine($"  {scan.SizeText}  {scan.FileCount:N0} files  {scan.DurationText}  {scan.CompletedLocalText}  {scan.LocationText}");
         }
         output.WriteLine($"Excluded folders: {exclusions.Count}");
         foreach (var path in exclusions.Items)
@@ -328,7 +326,8 @@ public static class CliHost
         output.WriteLine("                             Exact name, * ?, + AND, path:. --ext filters last '.' segment");
         output.WriteLine("                             (comma/semicolon/space; leading dots optional). --regex: whole");
         output.WriteLine("                             query is one .NET regex (path: still a prefix filter; + is not AND).");
-        output.WriteLine("  status                     Last scan time, size, exclusions");
+        output.WriteLine("                             Searches all saved snapshots; Last present is when the path was last seen.");
+        output.WriteLine("  status                     Snapshots, last present times, exclusions");
         output.WriteLine("  exclude add|list|remove    Skip folders on future scans");
         output.WriteLine("Shares the GUI cache under %LocalAppData%\\InstantFileSearch");
     }

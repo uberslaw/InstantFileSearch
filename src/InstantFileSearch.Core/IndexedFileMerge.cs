@@ -555,14 +555,8 @@ public static class IndexedFileMerge
         return false;
     }
 
-    private static ScanResult WithFiles(ScanResult scan, IReadOnlyList<FileEntry> files) => new()
-    {
-        Root = scan.Root,
-        AllFiles = files,
-        Duration = scan.Duration,
-        ErrorCount = scan.ErrorCount,
-        CompletedUtc = scan.CompletedUtc,
-    };
+    private static ScanResult WithFiles(ScanResult scan, IReadOnlyList<FileEntry> files) =>
+        scan.WithFiles(files);
 
     private static void Report(
         IProgress<MergeProgress>? progress,

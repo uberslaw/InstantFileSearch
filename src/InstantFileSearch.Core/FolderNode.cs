@@ -40,6 +40,16 @@ public sealed class FolderNode : INotifyPropertyChanged
             ? ScanLocation.FormatDuration(ScanDuration)
             : "";
 
+    /// <summary>
+    /// Left-tree caption. Scan roots include the snapshot's local completed
+    /// time so two loads of the same path stay distinguishable. Nested folders
+    /// and FILES keep <see cref="Name"/>.
+    /// </summary>
+    public string TreeLabel =>
+        Parent is not null || IsFilesNode || ScanCompletedUtc == default
+            ? Name
+            : Name + "  ·  " + ScanRefreshPrompt.FormatDoneAt(ScanCompletedUtc);
+
     public string ScanTimeTip =>
         Parent is not null || ScanCompletedUtc == default
             ? ""

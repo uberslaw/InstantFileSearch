@@ -82,14 +82,7 @@ public static class IndexedFileDelete
                     && itemPath.Equals(want, LocalPathGuard.Comparison)))
             .ToList();
 
-        updated = new ScanResult
-        {
-            Root = scan.Root,
-            AllFiles = remaining,
-            Duration = scan.Duration,
-            ErrorCount = scan.ErrorCount,
-            CompletedUtc = scan.CompletedUtc,
-        };
+        updated = scan.WithFiles(remaining);
         return true;
     }
 

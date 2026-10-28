@@ -57,6 +57,7 @@ public sealed class FileScanner
 
         return new ScanResult
         {
+            Id = Guid.NewGuid(),
             Root = root,
             AllFiles = files,
             Duration = clock.Elapsed,
