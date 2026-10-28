@@ -387,6 +387,161 @@ public class SearchFilterTests
     }
 
     [Fact]
+    public void ExtPdfDocxMatchesFilesNotFoldersOrTxt()
+    {
+        var folder = new FolderNode { Name = "a.pdf", FullPath = "/tmp/a.pdf", Size = 1 };
+        var files = new[]
+        {
+            File("a.pdf", "/tmp/a.pdf", 1),
+            File("b.DOCX", "/tmp/b.DOCX", 1),
+            File("c.txt", "/tmp/c.txt", 1),
+        };
+
+        var query = new SearchQuery { ExtensionsText = "pdf, .DOCX" };
+        Assert.Equal(["a.pdf", "b.DOCX"], FileNameSearch.Filter(files, query).Select(file => file.Name).ToList());
+        Assert.Empty(FileNameSearch.FilterHits([folder], files, query).Where(hit => hit.IsFolder));
+        Assert.DoesNotContain("c.txt", FileNameSearch.Filter(files, query).Select(file => file.Name));
+    }
+
+    [Fact]
+    public void EmptyExtDoesNotFilter()
+    {
+        var folder = new FolderNode { Name = "work", FullPath = "/tmp/work", Size = 1 };
+        var files = new[]
+        {
+            File("a.pdf", "/tmp/a.pdf", 1),
+            File("c.txt", "/tmp/c.txt", 1),
+        };
+
+        var all = FileNameSearch.FilterHits([folder], files, new SearchQuery { Text = "*", ExtensionsText = "" }).ToList();
+        Assert.Contains(all, hit => hit.Name == "work" && hit.IsFolder);
+        Assert.Equal(3, all.Count);
+        Assert.Empty(FileNameSearch.Filter(files, new SearchQuery { ExtensionsText = "" }));
+        Assert.True(new SearchQuery { Text = "*", ExtensionsText = "" }.HasCriteria);
+    }
+
+    [Fact]
+    public void ExtAndsWithNameSizeAndPath()
+    {
+        var files = new[]
+        {
+            File("report.pdf", @"C:\Work\Incoming\report.pdf", ByteFormatter.ToBytes(2, ByteSizeUnit.MB)),
+            File("report.pdf", @"C:\Work\Other\report.pdf", ByteFormatter.ToBytes(2, ByteSizeUnit.MB)),
+            File("report.txt", @"C:\Work\Incoming\report.txt", ByteFormatter.ToBytes(2, ByteSizeUnit.MB)),
+            File("tiny.pdf", @"C:\Work\Incoming\tiny.pdf", 10),
+        };
+
+        var matches = FileNameSearch.Filter(files, new SearchQuery
+        {
+            Text = "path:Incoming report*",
+            ExtensionsText = "pdf",
+            MinSizeBytes = ByteFormatter.ToBytes(1, ByteSizeUnit.MB),
+        }).Select(file => file.Name).ToList();
+
+        Assert.Equal(["report.pdf"], matches);
+    }
+
+    [Fact]
+    public void RegexModeMatchesUnanchoredAndDoesNotThrowOnInvalid()
+    {
+        var files = new[]
+        {
+            File("cisco-zero-day.txt", @"C:\docs\cisco-zero-day.txt", 1),
+            File("cisco.txt", @"C:\docs\cisco.txt", 1),
+            File("zero.log", @"C:\docs\zero.log", 1),
+        };
+
+        Assert.Equal(
+            ["cisco-zero-day.txt"],
+            FileNameSearch.Filter(files, new SearchQuery
+            {
+                Text = "cisco.*zero",
+                UseRegex = true,
+                Match = SearchMatchMode.Name,
+            }).Select(file => file.Name).ToList());
+        Assert.Empty(FileNameSearch.Filter(files, new SearchQuery
+        {
+            Text = "cisco.*zero",
+            UseRegex = false,
+            Match = SearchMatchMode.Name,
+        }));
+
+        var invalid = FileNameSearch.FilterHits([], files, new SearchQuery { Text = "[", UseRegex = true }).ToList();
+        Assert.Empty(invalid);
+        Assert.True(new SearchQuery { Text = "[", UseRegex = true }.HasInvalidRegex);
+    }
+
+    [Fact]
+    public void RegexModeKeepsPathFilterAndExt()
+    {
+        var files = new[]
+        {
+            File("cisco-zero-day.txt", @"C:\Work\Incoming\cisco-zero-day.txt", 1),
+            File("cisco-zero.zip", @"C:\Work\Incoming\cisco-zero.zip", 1),
+            File("cisco-zero-day.txt", @"C:\Work\Other\cisco-zero-day.txt", 1),
+        };
+
+        Assert.Equal(
+            [@"C:\Work\Incoming\cisco-zero-day.txt"],
+            FileNameSearch.Filter(files, new SearchQuery
+            {
+                Text = "cisco.*zero path:Incoming",
+                UseRegex = true,
+                ExtensionsText = "txt",
+                Match = SearchMatchMode.Name,
+            }).Select(file => file.FullPath).ToList());
+    }
+
+    [Fact]
+    public void CurrentScanHitsOnlyTheSelectedRoot()
+    {
+        var rootA = new FolderNode { Name = "A", FullPath = "/tmp/scan-a", Size = 20 };
+        var nested = new FolderNode { Name = "sub", FullPath = "/tmp/scan-a/sub", Parent = rootA, Size = 10 };
+        var rootB = new FolderNode { Name = "B", FullPath = "/tmp/scan-b", Size = 10 };
+        rootA.Folders.Add(nested);
+        var fileA = AddFile(nested, "hit.txt", "/tmp/scan-a/sub/hit.txt", 1);
+        var fileB = AddFile(rootB, "hit.txt", "/tmp/scan-b/hit.txt", 1);
+        FolderFilesNode.Attach(rootA);
+        FolderFilesNode.Attach(rootB);
+        var allFiles = new[] { fileA, fileB };
+
+        var files = FolderFilesNode.FilesForSearch(allFiles, nested, SearchScopeKind.CurrentScan).ToList();
+        var folders = FolderFilesNode.FoldersForSearch([rootA, rootB], nested, SearchScopeKind.CurrentScan).ToList();
+        Assert.Equal([fileA], files);
+        Assert.Contains(folders, node => node.Name == "A");
+        Assert.Contains(folders, node => node.Name == "sub");
+        Assert.DoesNotContain(folders, node => node.Name == "B");
+
+        var hits = FileNameSearch.FilterHits(folders, files, new SearchQuery { Text = "hit.txt" }).ToList();
+        Assert.Equal(["/tmp/scan-a/sub/hit.txt"], hits.Select(hit => hit.FullPath).ToList());
+        Assert.DoesNotContain(hits, hit => hit.FullPath == "/tmp/scan-b/hit.txt");
+
+        Assert.Empty(FolderFilesNode.FilesForSearch(allFiles, selected: null, SearchScopeKind.CurrentScan));
+        Assert.Empty(FolderFilesNode.FoldersForSearch([rootA, rootB], selected: null, SearchScopeKind.CurrentScan));
+    }
+
+    [Fact]
+    public void FilesNodeIsNeverASearchHitWithExtOrRegex()
+    {
+        var root = new FolderNode { Name = "work", FullPath = "/tmp/work", Size = 10 };
+        AddFile(root, "a.pdf", "/tmp/work/a.pdf", 10);
+        FolderFilesNode.Attach(root);
+        var filesNode = root.TreeChildren.Single(node => node.IsFilesNode);
+
+        Assert.Empty(FileNameSearch.FilterHits([filesNode], root.Files, new SearchQuery { Text = "FILES" }));
+        Assert.DoesNotContain(
+            FileNameSearch.FilterHits([filesNode], root.Files, new SearchQuery { ExtensionsText = "pdf" }),
+            hit => hit.IsFolder || hit.Name == FolderFilesNode.DisplayName);
+        Assert.Empty(FileNameSearch.FilterHits(
+            [filesNode],
+            [],
+            new SearchQuery { Text = "FILE.", UseRegex = true }));
+        Assert.Equal(
+            FolderFilesNode.FindScanRoot(root),
+            FolderFilesNode.FindScanRoot(filesNode));
+    }
+
+    [Fact]
     public void SpaceIsNotAnd()
     {
         var files = new[]

@@ -39,13 +39,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool _openingFolderResult;
     private string _scanPath = "";
     private string _searchText = "";
+    private string _extensionText = "";
+    private bool _isRegexMode;
     private string _sizeFromText = "";
     private string _sizeToText = "";
     private string _sizeFromUnit = "MB";
     private string _sizeToUnit = "MB";
     private string _modifiedFromText = "";
     private string _modifiedToText = "";
-    private string _searchScope = "All scans";
+    private string _searchScope = SearchScopes.AllScans;
     private string _matchMode = "Name or path";
     private bool _isAdvancedOpen;
     private string _statusText = "Choose a folder and scan. Drop a folder on the window to start. UNC shares can be pasted in the path box.";
@@ -194,6 +196,30 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    public string ExtensionText
+    {
+        get => _extensionText;
+        set
+        {
+            if (SetField(ref _extensionText, value))
+            {
+                ScheduleItemRefresh();
+            }
+        }
+    }
+
+    public bool IsRegexMode
+    {
+        get => _isRegexMode;
+        set
+        {
+            if (SetField(ref _isRegexMode, value))
+            {
+                ScheduleItemRefresh();
+            }
+        }
+    }
+
     public bool IsAdvancedOpen
     {
         get => _isAdvancedOpen;
@@ -202,7 +228,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public IReadOnlyList<string> SizeUnitOptions { get; } = ["B", "KB", "MB", "GB", "TB"];
 
-    public IReadOnlyList<string> ScopeOptions { get; } = ["All scans", "Selected folder"];
+    public IReadOnlyList<string> ScopeOptions { get; } =
+        [SearchScopes.AllScans, SearchScopes.CurrentScan, SearchScopes.SelectedFolder];
 
     public IReadOnlyList<string> MatchModeOptions { get; } = ["Name or path", "Name", "Path"];
 
@@ -211,6 +238,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public string SearchBoxTip => ResultsUi.SearchBoxTip;
 
     public string SearchMatchTip => ResultsUi.SearchMatchTip;
+
+    public string ExtensionBoxPlaceholder => ResultsUi.ExtensionBoxPlaceholder;
+
+    public string ExtensionBoxTip => ResultsUi.ExtensionBoxTip;
+
+    public string RegexModeTip => ResultsUi.RegexModeTip;
+
+    public string SearchScopeTip => ResultsUi.SearchScopeTip;
 
     public IReadOnlyList<string> TreeSortOptions => TreeSort.Labels;
 
@@ -314,7 +349,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         get => _searchScope;
         set
         {
-            if (SetField(ref _searchScope, string.IsNullOrWhiteSpace(value) ? "All scans" : value))
+            if (SetField(ref _searchScope, string.IsNullOrWhiteSpace(value) ? SearchScopes.AllScans : value))
             {
                 ScheduleItemRefresh();
             }
@@ -400,7 +435,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             NotifyPresentation();
             if (IsSearchActive && !_openingFolderResult)
             {
-                if (IsSelectedFolderScope)
+                if (IsSelectedFolderScope || IsCurrentScanScope)
                 {
                     ScheduleItemRefresh();
                 }
@@ -476,7 +511,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _scans.Count > 0,
         IsSearchActive,
         Items.Count,
-        filesAtLevel: SelectedFolder?.IsFilesNode == true);
+        filesAtLevel: SelectedFolder?.IsFilesNode == true,
+        invalidRegex: BuildSearchQuery().HasInvalidRegex);
 
     public bool IsEmptyStateVisible => ResultsUi.ShowEmptyState(Items.Count);
 
@@ -1535,11 +1571,17 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool IsSearchActive => BuildSearchQuery().HasCriteria;
 
     private bool IsSelectedFolderScope =>
-        string.Equals(SearchScope, "Selected folder", StringComparison.Ordinal);
+        string.Equals(SearchScope, SearchScopes.SelectedFolder, StringComparison.Ordinal);
+
+    private bool IsCurrentScanScope =>
+        string.Equals(SearchScope, SearchScopes.CurrentScan, StringComparison.Ordinal);
+
+    private SearchScopeKind ActiveSearchScope => SearchScopes.Parse(SearchScope);
 
     private SearchQuery BuildSearchQuery() => new()
     {
         Text = SearchText,
+        ExtensionsText = ExtensionText,
         MinSizeBytes = ByteFormatter.ParseOptionalBytes(SizeFromText, ByteFormatter.ParseUnit(SizeFromUnit)),
         MaxSizeBytes = ByteFormatter.ParseOptionalBytes(SizeToText, ByteFormatter.ParseUnit(SizeToUnit)),
         ModifiedFrom = SearchQuery.ParseDate(ModifiedFromText),
@@ -1552,6 +1594,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
             "Path" => SearchMatchMode.Path,
             _ => SearchMatchMode.NameOrPath,
         },
+        UseRegex = IsRegexMode,
+        RestrictToCurrentScan = IsCurrentScanScope,
     };
 
     private void ScheduleItemRefresh()
@@ -1579,17 +1623,18 @@ public sealed class MainViewModel : INotifyPropertyChanged
         try
         {
             await Task.Delay(SearchDebounce, token);
+            var scope = ActiveSearchScope;
             var files = FolderFilesNode.FilesForSearch(
                     _scans.SelectMany(scan => scan.AllFiles),
                     SelectedFolder,
-                    IsSelectedFolderScope)
+                    scope)
                 .ToList();
             var folders = FolderFilesNode.FoldersForSearch(
                     _scans.Select(scan => scan.Root),
                     SelectedFolder,
-                    IsSelectedFolderScope)
+                    scope)
                 .ToList();
-            if ((files.Count == 0 && folders.Count == 0) || generation != _searchGeneration)
+            if (generation != _searchGeneration)
             {
                 return;
             }
@@ -1623,6 +1668,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private static string FormatSearchStatus(SearchQuery query, int count)
     {
+        if (query.HasInvalidRegex)
+        {
+            return ResultsUi.InvalidRegexStatus;
+        }
+
         var label = string.IsNullOrWhiteSpace(query.Text) ? "filters" : $"\"{query.Text.Trim()}\"";
         return count == FileNameSearch.DefaultLimit
             ? $"Showing first {FileNameSearch.DefaultLimit:N0} matches for {label}"

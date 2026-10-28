@@ -188,6 +188,8 @@ public class CliHostTests
         Assert.Contains(@"\\server\share", help, StringComparison.Ordinal);
         Assert.Contains("path:", help, StringComparison.Ordinal);
         Assert.Contains("+ AND", help, StringComparison.Ordinal);
+        Assert.Contains("--ext", help, StringComparison.Ordinal);
+        Assert.Contains("--regex", help, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -212,6 +214,16 @@ public class CliHostTests
             Assert.Contains("cisco-zero-day.txt", pathOut);
             Assert.Contains("only-cisco.txt", pathOut);
             Assert.DoesNotContain("pack.zip", pathOut);
+            Assert.Equal(0, Run(["search", "--ext", "txt"], cache, exclusions, protector, out var extOut, out _));
+            Assert.Contains("cisco-zero-day.txt", extOut);
+            Assert.Contains("only-cisco.txt", extOut);
+            Assert.DoesNotContain("pack.zip", extOut);
+            Assert.Equal(0, Run(["search", "--regex", "cisco.*zero"], cache, exclusions, protector, out var regexOut, out _));
+            Assert.Contains("cisco-zero-day.txt", regexOut);
+            Assert.DoesNotContain("only-cisco.txt", regexOut);
+            Assert.Equal(0, Run(["search", "--regex", "["], cache, exclusions, protector, out var invalidOut, out var invalidErr));
+            Assert.Contains("0 match(es)", invalidOut);
+            Assert.Contains("invalid", invalidErr, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

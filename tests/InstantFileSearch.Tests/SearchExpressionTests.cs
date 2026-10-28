@@ -116,6 +116,50 @@ public class SearchExpressionTests
     }
 
     [Fact]
+    public void ExtOnlyQueryHasCriteria()
+    {
+        Assert.True(new SearchQuery { ExtensionsText = "pdf, .DOCX" }.HasCriteria);
+        Assert.False(new SearchQuery { ExtensionsText = "tar.gz, ***" }.HasCriteria);
+        Assert.True(new SearchQuery { RestrictToCurrentScan = true }.HasCriteria);
+    }
+
+    [Fact]
+    public void RegexModeKeepsWholePatternAndExtractsPath()
+    {
+        var expr = SearchExpression.Parse("cisco.*zero path:Incoming", regex: true);
+        Assert.True(expr.IsRegex);
+        Assert.False(expr.IsRegexInvalid);
+        Assert.False(expr.UsesAnd);
+        Assert.Empty(expr.Terms);
+        Assert.Equal("Incoming", Assert.Single(expr.PathFilters).Pattern);
+        Assert.NotNull(expr.CompiledRegex);
+        Assert.Matches(expr.CompiledRegex, "cisco-zero-day.txt");
+    }
+
+    [Fact]
+    public void RegexModeDoesNotTreatPlusAsAnd()
+    {
+        var expr = SearchExpression.Parse("cisco + zero", regex: true);
+        Assert.True(expr.IsRegex);
+        Assert.False(expr.UsesAnd);
+        Assert.Empty(expr.Terms);
+        Assert.NotNull(expr.CompiledRegex);
+    }
+
+    [Fact]
+    public void InvalidRegexDoesNotThrow()
+    {
+        var expr = SearchExpression.Parse("[", regex: true);
+        Assert.True(expr.IsRegex);
+        Assert.True(expr.IsRegexInvalid);
+        Assert.True(expr.HasText);
+        Assert.Null(expr.CompiledRegex);
+        Assert.True(new SearchQuery { Text = "[", UseRegex = true }.HasInvalidRegex);
+        Assert.True(new SearchQuery { Text = "[", UseRegex = true }.HasCriteria);
+        Assert.False(new SearchQuery { Text = "[", UseRegex = false }.HasInvalidRegex);
+    }
+
+    [Fact]
     public void NormalizeSlashesUnifiesSeparators()
     {
         Assert.Equal(@"foo\bar", SearchExpression.NormalizeSlashes("foo/bar"));

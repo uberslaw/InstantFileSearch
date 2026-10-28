@@ -13,6 +13,7 @@ public class ResultsUiTests
         Assert.Equal("This folder is empty.", ResultsUi.EmptyState(hasScans: true, isSearchActive: false, itemCount: 0));
         Assert.Equal("No files at this level.", ResultsUi.EmptyState(hasScans: true, isSearchActive: false, itemCount: 0, filesAtLevel: true));
         Assert.Equal("Nothing matches this search.", ResultsUi.EmptyState(hasScans: true, isSearchActive: true, itemCount: 0));
+        Assert.Equal(ResultsUi.InvalidRegexStatus, ResultsUi.EmptyState(hasScans: true, isSearchActive: true, itemCount: 0, invalidRegex: true));
         Assert.Equal("", ResultsUi.EmptyState(hasScans: true, isSearchActive: true, itemCount: 3));
     }
 
@@ -163,8 +164,16 @@ public class ResultsUiTests
         Assert.Contains("cisco + zero", ResultsUi.SearchBoxTip, StringComparison.Ordinal);
         Assert.Contains("path:Incoming", ResultsUi.SearchBoxTip, StringComparison.Ordinal);
         Assert.Contains("No OR", ResultsUi.SearchBoxTip, StringComparison.Ordinal);
+        Assert.Contains("Regex toggle", ResultsUi.SearchBoxTip, StringComparison.Ordinal);
+        Assert.Contains("not AND", ResultsUi.SearchBoxTip, StringComparison.Ordinal);
         Assert.Contains("not to path:", ResultsUi.SearchMatchTip, StringComparison.Ordinal);
         Assert.Contains("+ AND", ResultsUi.SearchBoxPlaceholder, StringComparison.Ordinal);
+        Assert.Contains("pdf, docx", ResultsUi.ExtensionBoxPlaceholder, StringComparison.Ordinal);
+        Assert.Contains("last '.' segment", ResultsUi.ExtensionBoxTip, StringComparison.Ordinal);
+        Assert.Contains("Invalid tokens", ResultsUi.ExtensionBoxTip, StringComparison.Ordinal);
+        Assert.Contains("Current scan", ResultsUi.SearchScopeTip, StringComparison.Ordinal);
+        Assert.Contains("scan root", ResultsUi.SearchScopeTip, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(".NET regex", ResultsUi.RegexModeTip, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -125,6 +125,13 @@ public class FolderFilesNodeTests
         Assert.DoesNotContain(descendants, node => node.IsFilesNode);
         Assert.Contains(FolderFilesNode.FoldersForSearch([root], selected: null, selectedFolderScope: false), node => node.Name == "root");
 
+        var currentFromFiles = FolderFilesNode.FoldersForSearch([root], filesNode, SearchScopeKind.CurrentScan).ToList();
+        Assert.Contains(currentFromFiles, node => node.Name == "root");
+        Assert.Contains(currentFromFiles, node => node.Name == "sub");
+        Assert.DoesNotContain(currentFromFiles, node => node.IsFilesNode);
+        var currentFiles = FolderFilesNode.FilesForSearch(all, filesNode, SearchScopeKind.CurrentScan).ToList();
+        Assert.Equal(all, currentFiles);
+
         var matches = FileNameSearch.Filter(all, new SearchQuery
         {
             UnderFolder = filesNode.FullPath,

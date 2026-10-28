@@ -1,4 +1,5 @@
 using System.IO.Enumeration;
+using System.Text.RegularExpressions;
 
 namespace InstantFileSearch;
 
@@ -35,7 +36,13 @@ public static class FileNameSearch
             yield break;
         }
 
-        var expression = SearchExpression.Parse(query.Text);
+        var expression = SearchExpression.Parse(query.Text, query.UseRegex);
+        if (expression.IsRegexInvalid)
+        {
+            yield break;
+        }
+
+        var extensions = ExtensionFilter.Parse(query.ExtensionsText);
         var taken = 0;
 
         foreach (var folder in folders)
@@ -56,8 +63,10 @@ public static class FileNameSearch
                     folder.Size,
                     folder.Modified,
                     folder.Parent?.FullPath,
+                    isFolder: true,
                     expression,
-                    query))
+                    query,
+                    extensions))
             {
                 continue;
             }
@@ -79,8 +88,10 @@ public static class FileNameSearch
                     file.Size,
                     file.Modified,
                     file.Parent?.FullPath,
+                    isFolder: false,
                     expression,
-                    query))
+                    query,
+                    extensions))
             {
                 continue;
             }
@@ -125,10 +136,17 @@ public static class FileNameSearch
         long size,
         DateTime modified,
         string? parentPath,
+        bool isFolder,
         SearchExpression expression,
-        SearchQuery query)
+        SearchQuery query,
+        IReadOnlyList<string> extensions)
     {
         if (!MatchesSize(size, query) || !MatchesModified(modified, query) || !MatchesFolder(fullPath, parentPath, query))
+        {
+            return false;
+        }
+
+        if (!ExtensionFilter.Matches(name, isFolder, extensions))
         {
             return false;
         }
@@ -136,6 +154,12 @@ public static class FileNameSearch
         if (!MatchesPathFilters(fullPath, expression.PathFilters))
         {
             return false;
+        }
+
+        if (expression.IsRegex)
+        {
+            return expression.CompiledRegex is null
+                || MatchesRegex(name, fullPath, expression.CompiledRegex, query.Match);
         }
 
         if (expression.Terms.Count == 0)
@@ -152,6 +176,25 @@ public static class FileNameSearch
         }
 
         return true;
+    }
+
+    private static bool MatchesRegex(
+        string name,
+        string fullPath,
+        Regex regex,
+        SearchMatchMode match)
+    {
+        var useName = match != SearchMatchMode.Path;
+        var usePath = match != SearchMatchMode.Name;
+        try
+        {
+            return (useName && regex.IsMatch(name))
+                   || (usePath && regex.IsMatch(fullPath));
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return false;
+        }
     }
 
     private static bool MatchesPathFilters(string fullPath, IReadOnlyList<SearchTerm> filters)

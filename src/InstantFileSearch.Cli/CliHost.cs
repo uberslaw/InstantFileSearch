@@ -106,10 +106,21 @@ public static class CliHost
         string cachePath,
         IByteProtector protector)
     {
-        var query = string.Join(" ", args).Trim();
-        if (query.Length == 0)
+        if (!TryParseSearchArgs(args, out var query, out var ext, out var regex, out var usageError))
         {
-            error.WriteLine("Usage: InstantFileSearch.Cli search <query>");
+            error.WriteLine(usageError);
+            return 1;
+        }
+
+        var search = new SearchQuery
+        {
+            Text = query,
+            ExtensionsText = ext,
+            UseRegex = regex,
+        };
+        if (!search.HasCriteria)
+        {
+            error.WriteLine("Usage: InstantFileSearch.Cli search [--ext pdf,docx] [--regex] <query>");
             return 1;
         }
 
@@ -127,10 +138,17 @@ public static class CliHost
             return 2;
         }
 
+        if (search.HasInvalidRegex)
+        {
+            error.WriteLine(ResultsUi.InvalidRegexStatus);
+            output.WriteLine("0 match(es)");
+            return 0;
+        }
+
         var matches = FileNameSearch.FilterHits(
             FolderFilesNode.FoldersForSearch(scans.Select(scan => scan.Root), selected: null, selectedFolderScope: false),
             scans.SelectMany(scan => scan.AllFiles),
-            new SearchQuery { Text = query }).ToList();
+            search).ToList();
         foreach (var hit in matches)
         {
             var kind = hit.IsFolder ? "Folder" : "File";
@@ -139,6 +157,52 @@ public static class CliHost
 
         output.WriteLine($"{matches.Count} match(es)");
         return 0;
+    }
+
+    private static bool TryParseSearchArgs(
+        string[] args,
+        out string query,
+        out string ext,
+        out bool regex,
+        out string usageError)
+    {
+        query = "";
+        ext = "";
+        regex = false;
+        usageError = "";
+        var parts = new List<string>();
+        for (var i = 0; i < args.Length; i++)
+        {
+            var arg = args[i];
+            if (arg is "--ext" or "-e")
+            {
+                if (i + 1 >= args.Length)
+                {
+                    usageError = "Usage: InstantFileSearch.Cli search [--ext pdf,docx] [--regex] <query>";
+                    return false;
+                }
+
+                ext = args[++i];
+                continue;
+            }
+
+            if (arg.StartsWith("--ext=", StringComparison.Ordinal))
+            {
+                ext = arg["--ext=".Length..];
+                continue;
+            }
+
+            if (arg is "--regex" or "-r")
+            {
+                regex = true;
+                continue;
+            }
+
+            parts.Add(arg);
+        }
+
+        query = string.Join(" ", parts).Trim();
+        return true;
     }
 
     private static int Status(
@@ -260,7 +324,10 @@ public static class CliHost
     {
         output.WriteLine("Instant File Search CLI");
         output.WriteLine("  scan <folder>              Scan a local folder or UNC share (\\\\server\\share)");
-        output.WriteLine("  search <query>             Same expressions as the GUI: exact name, * ?, + AND, path:");
+        output.WriteLine("  search [--ext pdf,docx] [--regex] <query>");
+        output.WriteLine("                             Exact name, * ?, + AND, path:. --ext filters last '.' segment");
+        output.WriteLine("                             (comma/semicolon/space; leading dots optional). --regex: whole");
+        output.WriteLine("                             query is one .NET regex (path: still a prefix filter; + is not AND).");
         output.WriteLine("  status                     Last scan time, size, exclusions");
         output.WriteLine("  exclude add|list|remove    Skip folders on future scans");
         output.WriteLine("Shares the GUI cache under %LocalAppData%\\InstantFileSearch");

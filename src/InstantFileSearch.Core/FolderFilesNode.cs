@@ -85,11 +85,32 @@ public static class FolderFilesNode
     public static IEnumerable<FileEntry> FilesForSearch(
         IEnumerable<FileEntry> allFiles,
         FolderNode? selected,
-        bool selectedFolderScope)
+        bool selectedFolderScope) =>
+        FilesForSearch(
+            allFiles,
+            selected,
+            selectedFolderScope ? SearchScopeKind.SelectedFolder : SearchScopeKind.AllScans);
+
+    public static IEnumerable<FileEntry> FilesForSearch(
+        IEnumerable<FileEntry> allFiles,
+        FolderNode? selected,
+        SearchScopeKind scope)
     {
-        if (selectedFolderScope && selected is { IsFilesNode: true })
+        ArgumentNullException.ThrowIfNull(allFiles);
+        if (scope == SearchScopeKind.SelectedFolder && selected is { IsFilesNode: true })
         {
             return selected.Parent?.Files ?? selected.Files;
+        }
+
+        if (scope == SearchScopeKind.CurrentScan)
+        {
+            var root = FindScanRoot(selected);
+            if (root is null)
+            {
+                return [];
+            }
+
+            return allFiles.Where(file => ReferenceEquals(FindScanRoot(file.Parent), root));
         }
 
         return allFiles;
@@ -98,14 +119,25 @@ public static class FolderFilesNode
     /// <summary>
     /// Real folders for search. Never yields FILES. Selected-folder scope lists
     /// descendants of that folder (not the folder itself). FILES selected → none.
+    /// Current scan lists the whole selected scan root, even if a nested folder
+    /// or FILES is selected. No selection → none.
     /// </summary>
     public static IEnumerable<FolderNode> FoldersForSearch(
         IEnumerable<FolderNode> roots,
         FolderNode? selected,
-        bool selectedFolderScope)
+        bool selectedFolderScope) =>
+        FoldersForSearch(
+            roots,
+            selected,
+            selectedFolderScope ? SearchScopeKind.SelectedFolder : SearchScopeKind.AllScans);
+
+    public static IEnumerable<FolderNode> FoldersForSearch(
+        IEnumerable<FolderNode> roots,
+        FolderNode? selected,
+        SearchScopeKind scope)
     {
         ArgumentNullException.ThrowIfNull(roots);
-        if (selectedFolderScope)
+        if (scope == SearchScopeKind.SelectedFolder)
         {
             if (selected is null || selected.IsFilesNode)
             {
@@ -120,6 +152,22 @@ public static class FolderFilesNode
             yield break;
         }
 
+        if (scope == SearchScopeKind.CurrentScan)
+        {
+            var root = FindScanRoot(selected);
+            if (root is null)
+            {
+                yield break;
+            }
+
+            foreach (var node in EnumerateFolders(root, includeSelf: true))
+            {
+                yield return node;
+            }
+
+            yield break;
+        }
+
         foreach (var root in roots)
         {
             foreach (var node in EnumerateFolders(root, includeSelf: true))
@@ -127,6 +175,25 @@ public static class FolderFilesNode
                 yield return node;
             }
         }
+    }
+
+    /// <summary>
+    /// Top-level scan that contains <paramref name="node"/> (walk Parent).
+    /// FILES walks to the real scan root. Null when nothing is selected.
+    /// </summary>
+    public static FolderNode? FindScanRoot(FolderNode? node)
+    {
+        if (node is null)
+        {
+            return null;
+        }
+
+        while (node.Parent is not null)
+        {
+            node = node.Parent;
+        }
+
+        return node.IsFilesNode ? null : node;
     }
 
     private static IEnumerable<FolderNode> EnumerateFolders(FolderNode node, bool includeSelf)
