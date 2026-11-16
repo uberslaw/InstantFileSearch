@@ -162,30 +162,51 @@ public class SearchFilterTests
         Assert.True(FileNameSearch.Matches(files[1], "unique-token.log", false, SearchMatchMode.Name));
         Assert.True(FileNameSearch.Matches(files[1], "unique-token*", true, SearchMatchMode.Name));
 
+        Assert.Equal(["unique-token.log"], FileNameSearch.Filter(files, new SearchQuery
+        {
+            Text = "unique-token",
+            Match = SearchMatchMode.Name,
+        }).Select(file => file.Name).ToList());
+        Assert.DoesNotContain(
+            "notes.txt",
+            FileNameSearch.Filter(files, new SearchQuery
+            {
+                Text = "unique-token",
+                Match = SearchMatchMode.Name,
+            }).Select(file => file.Name));
         Assert.Empty(FileNameSearch.Filter(files, new SearchQuery
         {
             Text = "unique-token",
             Match = SearchMatchMode.Name,
+            TermOperator = SearchTermOperator.IsExactly,
         }));
         Assert.Equal(["unique-token.log"], FileNameSearch.Filter(files, new SearchQuery
         {
             Text = "unique-token.log",
             Match = SearchMatchMode.Name,
+            TermOperator = SearchTermOperator.IsExactly,
         }).Select(file => file.Name).ToList());
 
         Assert.Equal(["notes.txt"], FileNameSearch.Filter(files, new SearchQuery
         {
             Text = files[0].FullPath,
             Match = SearchMatchMode.Path,
+            TermOperator = SearchTermOperator.IsExactly,
         }).Select(file => file.Name).ToList());
         Assert.Empty(FileNameSearch.Filter(files, new SearchQuery
         {
             Text = "unique-token",
             Match = SearchMatchMode.Path,
+            TermOperator = SearchTermOperator.IsExactly,
         }));
         Assert.Equal(2, FileNameSearch.Filter(files, new SearchQuery
         {
             Text = "*unique-token*",
+            Match = SearchMatchMode.Path,
+        }).Count());
+        Assert.Equal(2, FileNameSearch.Filter(files, new SearchQuery
+        {
+            Text = "unique-token",
             Match = SearchMatchMode.Path,
         }).Count());
 
@@ -193,6 +214,7 @@ public class SearchFilterTests
         {
             Text = "unique-token.log",
             Match = SearchMatchMode.NameOrPath,
+            TermOperator = SearchTermOperator.IsExactly,
         }).Select(file => file.Name).ToList());
     }
 
@@ -256,8 +278,10 @@ public class SearchFilterTests
 
         var files = new[] { root.Files[0], cmd.Files[0] };
         var hits = FileNameSearch.FilterHits(folders, files, new SearchQuery { Text = "cmd" }).ToList();
-        Assert.Equal(["cmd"], hits.Select(hit => hit.Name).ToList());
-        Assert.True(hits[0].IsFolder);
+        Assert.Equal(
+            ["anythingwithcmdinit", "cmd", "cmd.exe"],
+            hits.Select(hit => hit.Name).OrderBy(name => name).ToList());
+        Assert.Contains(hits, hit => hit.IsFolder && hit.Name == "cmd");
 
         Assert.Equal(["cmd.exe"], FileNameSearch.FilterHits(folders, files, new SearchQuery { Text = "cmd.exe" }).Select(hit => hit.Name).ToList());
         Assert.Equal(
@@ -265,6 +289,15 @@ public class SearchFilterTests
             FileNameSearch.FilterHits(folders, files, new SearchQuery { Text = "cmd*" })
                 .Select(hit => hit.Name)
                 .OrderBy(name => name)
+                .ToList());
+        Assert.Equal(
+            ["cmd"],
+            FileNameSearch.FilterHits(folders, files, new SearchQuery
+                {
+                    Text = "cmd",
+                    TermOperator = SearchTermOperator.IsExactly,
+                })
+                .Select(hit => hit.Name)
                 .ToList());
 
         var contains = FileNameSearch.FilterHits(folders, files, new SearchQuery
@@ -283,18 +316,83 @@ public class SearchFilterTests
     }
 
     [Fact]
-    public void AndContainsDoesNotChangeSingleTermExactDefault()
+    public void DefaultContainsMatchesPartialName()
     {
         var files = new[]
         {
-            File("cisco", @"C:\docs\cisco", 1),
-            File("anythingwithciscoinit", @"C:\docs\anythingwithciscoinit", 1),
-            File("cisco-zero-day.txt", @"C:\docs\cisco-zero-day.txt", 1),
+            File("cmd", @"C:\docs\cmd", 1),
+            File("cmd.exe", @"C:\docs\cmd.exe", 1),
+            File("anythingwithcmdinit", @"C:\docs\anythingwithcmdinit", 1),
+            File("other.txt", @"C:\docs\other.txt", 1),
         };
 
-        Assert.Equal(["cisco"], Names(files, "cisco", SearchMatchMode.Name));
-        Assert.DoesNotContain("anythingwithciscoinit", Names(files, "cisco", SearchMatchMode.Name));
-        Assert.DoesNotContain("cisco-zero-day.txt", Names(files, "cisco", SearchMatchMode.Name));
+        Assert.Equal(SearchTermOperator.Contains, new SearchQuery().TermOperator);
+        Assert.Equal(
+            ["anythingwithcmdinit", "cmd", "cmd.exe"],
+            Names(files, "cmd", SearchMatchMode.Name).OrderBy(name => name, StringComparer.Ordinal).ToList());
+        Assert.DoesNotContain("other.txt", Names(files, "cmd", SearchMatchMode.Name));
+        Assert.Equal(["cmd"], Names(files, "cmd", SearchMatchMode.Name, SearchTermOperator.IsExactly));
+        Assert.DoesNotContain("cmd.exe", Names(files, "cmd", SearchMatchMode.Name, SearchTermOperator.IsExactly));
+    }
+
+    [Fact]
+    public void DefaultMatchNameIgnoresPathOnlyHit()
+    {
+        var files = new[]
+        {
+            File("notes.txt", @"C:\unique-token\notes.txt", 1),
+            File("unique-token.log", @"C:\other\unique-token.log", 1),
+        };
+
+        Assert.Equal(SearchMatchMode.Name, new SearchQuery().Match);
+        Assert.Equal(["unique-token.log"], Names(files, "unique-token"));
+        Assert.DoesNotContain("notes.txt", Names(files, "unique-token"));
+        Assert.Equal(
+            ["notes.txt", "unique-token.log"],
+            Names(files, "unique-token", SearchMatchMode.NameOrPath));
+    }
+
+    [Fact]
+    public void IsNotExactlyExcludesWholeStringEquals()
+    {
+        var files = new[]
+        {
+            File("cmd", @"C:\docs\cmd", 1),
+            File("cmd.exe", @"C:\docs\cmd.exe", 1),
+            File("anythingwithcmdinit", @"C:\docs\anythingwithcmdinit", 1),
+        };
+
+        Assert.Equal(
+            ["anythingwithcmdinit", "cmd.exe"],
+            Names(files, "cmd", SearchMatchMode.Name, SearchTermOperator.IsNotExactly)
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToList());
+        Assert.DoesNotContain("cmd", Names(files, "cmd", SearchMatchMode.Name, SearchTermOperator.IsNotExactly));
+        Assert.Empty(FileNameSearch.Filter(files, new SearchQuery { TermOperator = SearchTermOperator.IsNotExactly }));
+        Assert.Equal(
+            ["cmd.exe"],
+            Names(files, "cmd + anythingwithcmdinit", SearchMatchMode.Name, SearchTermOperator.IsNotExactly));
+    }
+
+    [Fact]
+    public void BeginsWithAndEndsWithUsePrefixAndSuffix()
+    {
+        var files = new[]
+        {
+            File("cmd", @"C:\docs\cmd", 1),
+            File("cmd.exe", @"C:\docs\cmd.exe", 1),
+            File("foocmd", @"C:\docs\foocmd", 1),
+            File("anythingwithcmdinit", @"C:\docs\anythingwithcmdinit", 1),
+        };
+
+        Assert.Equal(
+            ["cmd", "cmd.exe"],
+            Names(files, "cmd", SearchMatchMode.Name, SearchTermOperator.BeginsWith));
+        Assert.DoesNotContain("foocmd", Names(files, "cmd", SearchMatchMode.Name, SearchTermOperator.BeginsWith));
+        Assert.Equal(
+            ["cmd", "foocmd"],
+            Names(files, "cmd", SearchMatchMode.Name, SearchTermOperator.EndsWith));
+        Assert.DoesNotContain("cmd.exe", Names(files, "cmd", SearchMatchMode.Name, SearchTermOperator.EndsWith));
     }
 
     [Fact]
@@ -348,6 +446,9 @@ public class SearchFilterTests
         };
 
         Assert.Equal(["keep.bin"], Names(files, "path:Incoming", SearchMatchMode.Name));
+        Assert.Equal(
+            ["keep.bin"],
+            Names(files, "path:Incoming", SearchMatchMode.Name, SearchTermOperator.IsExactly));
     }
 
     [Fact]
@@ -376,7 +477,8 @@ public class SearchFilterTests
         };
 
         Assert.Equal(["cisco zero.txt"], Names(files, "\"cisco zero.txt\"", SearchMatchMode.Name));
-        Assert.Empty(Names(files, "\"cisco zero\"", SearchMatchMode.Name));
+        Assert.Equal(["cisco zero.txt"], Names(files, "\"cisco zero\"", SearchMatchMode.Name));
+        Assert.Empty(Names(files, "\"cisco zero\"", SearchMatchMode.Name, SearchTermOperator.IsExactly));
         Assert.Equal(
             ["cisco zero.txt", "cisco-zero-day.txt"],
             Names(files, "cisco* + *zero*", SearchMatchMode.Name));
@@ -518,6 +620,10 @@ public class SearchFilterTests
 
         Assert.Empty(FolderFilesNode.FilesForSearch(allFiles, selected: null, SearchScopeKind.CurrentScan));
         Assert.Empty(FolderFilesNode.FoldersForSearch([rootA, rootB], selected: null, SearchScopeKind.CurrentScan));
+        Assert.Equal(SearchScopeKind.CurrentScan, default(SearchScopeKind));
+        Assert.Equal(SearchScopeKind.CurrentScan, SearchScopes.Parse(null));
+        var defaultScoped = FolderFilesNode.FilesForSearch(allFiles, nested, default(SearchScopeKind)).ToList();
+        Assert.Equal([fileA], defaultScoped);
     }
 
     [Fact]
@@ -551,11 +657,28 @@ public class SearchFilterTests
         };
 
         Assert.Equal(["cisco zero.txt"], Names(files, "cisco zero.txt", SearchMatchMode.Name));
-        Assert.Empty(Names(files, "cisco zero", SearchMatchMode.Name));
+        Assert.Equal(["cisco zero.txt"], Names(files, "cisco zero", SearchMatchMode.Name));
+        Assert.DoesNotContain("cisco-zero-day.txt", Names(files, "cisco zero", SearchMatchMode.Name));
+        Assert.Empty(Names(files, "cisco zero", SearchMatchMode.Name, SearchTermOperator.IsExactly));
     }
 
+    private static List<string> Names(FileEntry[] files, string text) =>
+        Names(files, text, SearchMatchMode.Name, SearchTermOperator.Contains);
+
     private static List<string> Names(FileEntry[] files, string text, SearchMatchMode match) =>
-        FileNameSearch.Filter(files, new SearchQuery { Text = text, Match = match })
+        Names(files, text, match, SearchTermOperator.Contains);
+
+    private static List<string> Names(
+        FileEntry[] files,
+        string text,
+        SearchMatchMode match,
+        SearchTermOperator termOperator) =>
+        FileNameSearch.Filter(files, new SearchQuery
+            {
+                Text = text,
+                Match = match,
+                TermOperator = termOperator,
+            })
             .Select(file => file.Name)
             .ToList();
 

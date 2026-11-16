@@ -49,11 +49,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private string _sizeToUnit = "MB";
     private string _modifiedFromText = "";
     private string _modifiedToText = "";
-    private string _searchScope = SearchScopes.AllScans;
+    private string _searchScope = SearchScopes.Default;
     private string _historyFilter = "";
     private ScanHistoryEntry? _selectedHistoryEntry;
-    private string _matchMode = "Name or path";
-    private bool _isAdvancedOpen;
+    private string _matchMode = SearchMatchModes.Default;
+    private string _termOperator = SearchTermOperators.Default;
     private string _statusText = "Choose a folder and scan. Drop a folder on the window to start. UNC shares can be pasted in the path box.";
     private bool _isScanning;
     private bool _isMerging;
@@ -229,21 +229,18 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             if (SetField(ref _isRegexMode, value))
             {
+                OnPropertyChanged(nameof(IsTermOperatorEnabled));
                 ScheduleItemRefresh();
             }
         }
     }
 
-    public bool IsAdvancedOpen
-    {
-        get => _isAdvancedOpen;
-        set => SetField(ref _isAdvancedOpen, value);
-    }
+    public bool IsTermOperatorEnabled => !IsRegexMode;
 
     public IReadOnlyList<string> SizeUnitOptions { get; } = ["B", "KB", "MB", "GB", "TB"];
 
     public IReadOnlyList<string> ScopeOptions { get; } =
-        [SearchScopes.AllScans, SearchScopes.CurrentScan, SearchScopes.AllPrevious, SearchScopes.SelectedFolder];
+        [SearchScopes.CurrentScan, SearchScopes.AllScans, SearchScopes.AllPrevious, SearchScopes.SelectedFolder];
 
     public string SearchScopeTip => ResultsUi.SearchScopeTip;
 
@@ -264,13 +261,27 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public ObservableCollection<ScanHistoryEntry> HistoryEntries { get; } = [];
 
-    public IReadOnlyList<string> MatchModeOptions { get; } = ["Name or path", "Name", "Path"];
+    public IReadOnlyList<string> MatchModeOptions { get; } =
+        [SearchMatchModes.Name, SearchMatchModes.Path, SearchMatchModes.NameOrPath];
+
+    public string MatchModeGroupLabel => SearchMatchModes.GroupLabel;
+
+    public IReadOnlyList<string> TermOperatorOptions { get; } =
+        [
+            SearchTermOperators.Contains,
+            SearchTermOperators.IsExactly,
+            SearchTermOperators.IsNotExactly,
+            SearchTermOperators.BeginsWith,
+            SearchTermOperators.EndsWith,
+        ];
 
     public string SearchBoxPlaceholder => ResultsUi.SearchBoxPlaceholder;
 
     public string SearchBoxTip => ResultsUi.SearchBoxTip;
 
     public string SearchMatchTip => ResultsUi.SearchMatchTip;
+
+    public string TermOperatorTip => ResultsUi.TermOperatorTip;
 
     public string ExtensionBoxPlaceholder => ResultsUi.ExtensionBoxPlaceholder;
 
@@ -380,7 +391,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         get => _searchScope;
         set
         {
-            if (SetField(ref _searchScope, string.IsNullOrWhiteSpace(value) ? SearchScopes.AllScans : value))
+            if (SetField(ref _searchScope, string.IsNullOrWhiteSpace(value) ? SearchScopes.Default : value))
             {
                 ScheduleItemRefresh();
             }
@@ -392,7 +403,19 @@ public sealed class MainViewModel : INotifyPropertyChanged
         get => _matchMode;
         set
         {
-            if (SetField(ref _matchMode, string.IsNullOrWhiteSpace(value) ? "Name or path" : value))
+            if (SetField(ref _matchMode, string.IsNullOrWhiteSpace(value) ? SearchMatchModes.Default : value))
+            {
+                ScheduleItemRefresh();
+            }
+        }
+    }
+
+    public string TermOperator
+    {
+        get => _termOperator;
+        set
+        {
+            if (SetField(ref _termOperator, string.IsNullOrWhiteSpace(value) ? SearchTermOperators.Default : value))
             {
                 ScheduleItemRefresh();
             }
@@ -1782,12 +1805,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ModifiedTo = SearchQuery.ParseDate(ModifiedToText),
         UnderFolder = IsSelectedFolderScope ? SelectedFolder?.FullPath ?? "" : null,
         DirectChildrenOnly = IsSelectedFolderScope && SelectedFolder?.IsFilesNode == true,
-        Match = MatchMode switch
-        {
-            "Name" => SearchMatchMode.Name,
-            "Path" => SearchMatchMode.Path,
-            _ => SearchMatchMode.NameOrPath,
-        },
+        Match = SearchMatchModes.Parse(MatchMode),
+        TermOperator = SearchTermOperators.Parse(_termOperator),
         UseRegex = IsRegexMode,
         RestrictToCurrentScan = IsCurrentScanScope,
     };

@@ -4,17 +4,31 @@ namespace InstantFileSearch;
 
 public enum SearchMatchMode
 {
-    NameOrPath = 0,
-    Name = 1,
-    Path = 2,
+    Name = 0,
+    Path = 1,
+    NameOrPath = 2,
 }
 
 public enum SearchScopeKind
 {
-    AllScans = 0,
-    CurrentScan = 1,
+    CurrentScan = 0,
+    AllScans = 1,
     SelectedFolder = 2,
     AllPrevious = 3,
+}
+
+/// <summary>
+/// How each name/path term matches the Match field. Does not apply to
+/// <c>path:</c> filters, Ext, or Regex mode. A term that already has <c>*</c>
+/// or <c>?</c> is an explicit glob and is not wrapped.
+/// </summary>
+public enum SearchTermOperator
+{
+    Contains = 0,
+    IsExactly = 1,
+    IsNotExactly = 2,
+    BeginsWith = 3,
+    EndsWith = 4,
 }
 
 public static class SearchScopes
@@ -23,14 +37,52 @@ public static class SearchScopes
     public const string CurrentScan = "Current scan";
     public const string SelectedFolder = "Selected folder";
     public const string AllPrevious = "All previous scans";
+    public const string Default = CurrentScan;
 
     public static SearchScopeKind Parse(string? label) =>
         label switch
         {
-            CurrentScan => SearchScopeKind.CurrentScan,
+            AllScans => SearchScopeKind.AllScans,
             SelectedFolder => SearchScopeKind.SelectedFolder,
             AllPrevious => SearchScopeKind.AllPrevious,
-            _ => SearchScopeKind.AllScans,
+            _ => SearchScopeKind.CurrentScan,
+        };
+}
+
+public static class SearchMatchModes
+{
+    public const string Name = "Name";
+    public const string Path = "Path";
+    public const string NameOrPath = "Name or path";
+    public const string Default = Name;
+    public const string GroupLabel = "Name / Path";
+
+    public static SearchMatchMode Parse(string? label) =>
+        label switch
+        {
+            Path => SearchMatchMode.Path,
+            NameOrPath => SearchMatchMode.NameOrPath,
+            _ => SearchMatchMode.Name,
+        };
+}
+
+public static class SearchTermOperators
+{
+    public const string Contains = "contains";
+    public const string IsExactly = "is exactly";
+    public const string IsNotExactly = "is not exactly";
+    public const string BeginsWith = "begins with";
+    public const string EndsWith = "ends with";
+    public const string Default = Contains;
+
+    public static SearchTermOperator Parse(string? label) =>
+        label switch
+        {
+            IsExactly => SearchTermOperator.IsExactly,
+            IsNotExactly => SearchTermOperator.IsNotExactly,
+            BeginsWith => SearchTermOperator.BeginsWith,
+            EndsWith => SearchTermOperator.EndsWith,
+            _ => SearchTermOperator.Contains,
         };
 }
 
@@ -49,10 +101,15 @@ public sealed class SearchQuery
     /// with Selected-folder scope (files only; FILES is not a folder hit).
     /// </summary>
     public bool DirectChildrenOnly { get; init; }
-    public SearchMatchMode Match { get; init; } = SearchMatchMode.NameOrPath;
+    public SearchMatchMode Match { get; init; } = SearchMatchMode.Name;
+    /// <summary>
+    /// How each name/path term is applied. Ignored in Regex mode and for
+    /// <c>path:</c> / Ext. Default is contains (substring on the Match field).
+    /// </summary>
+    public SearchTermOperator TermOperator { get; init; } = SearchTermOperator.Contains;
     /// <summary>
     /// When true, <see cref="Text"/> (minus <c>path:</c> filters) is one .NET
-    /// regex. Default is the exact / wildcard / <c>+</c> expression language.
+    /// regex. Default is the operator / wildcard / <c>+</c> expression language.
     /// </summary>
     public bool UseRegex { get; init; }
     /// <summary>
@@ -66,7 +123,7 @@ public sealed class SearchQuery
         UseRegex && SearchExpression.Parse(Text, regex: true).IsRegexInvalid;
 
     public bool HasCriteria =>
-        SearchExpression.Parse(Text, UseRegex).HasText
+        SearchExpression.Parse(Text, UseRegex, TermOperator).HasText
         || ExtensionFilter.HasAny(ExtensionsText)
         || MinSizeBytes is not null
         || MaxSizeBytes is not null

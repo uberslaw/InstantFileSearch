@@ -148,43 +148,55 @@
                 </Grid>
                 <Grid Margin="0,8,0,0">
                     <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
+                    <ComboBox Grid.Column="0"
+                              MinWidth="132"
+                              Width="136"
+                              Margin="0,0,8,0"
+                              ItemsSource="{Binding TermOperatorOptions}"
+                              SelectedItem="{Binding TermOperator}"
+                              IsEnabled="{Binding IsTermOperatorEnabled}"
+                              ToolTip="{Binding TermOperatorTip}"/>
                     <TextBox x:Name="SearchBox"
-                             Grid.Column="0"
+                             Grid.Column="1"
+                             MinWidth="140"
                              Tag="{Binding SearchBoxPlaceholder}"
                              Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                              ToolTip="{Binding SearchBoxTip}"/>
-                    <DockPanel Grid.Column="1" Margin="8,0,0,0" LastChildFill="True">
+                    <DockPanel Grid.Column="2" Margin="8,0,0,0" LastChildFill="True">
                         <TextBlock Text="Ext"
                                    VerticalAlignment="Center"
                                    Margin="0,0,6,0"
                                    Foreground="{DynamicResource MutedBrush}"
                                    FontWeight="SemiBold"
                                    ToolTip="{Binding ExtensionBoxTip}"/>
-                        <TextBox MinWidth="108"
-                                 Width="124"
+                        <TextBox MinWidth="96"
+                                 Width="108"
                                  Tag="{Binding ExtensionBoxPlaceholder}"
                                  Text="{Binding ExtensionText, UpdateSourceTrigger=PropertyChanged}"
                                  ToolTip="{Binding ExtensionBoxTip}"/>
                     </DockPanel>
-                    <ToggleButton Grid.Column="2"
+                    <ToggleButton Grid.Column="3"
                                   Content="Regex"
                                   Margin="8,0,0,0"
                                   IsChecked="{Binding IsRegexMode}"
                                   Style="{StaticResource ToolbarToggle}"
                                   ToolTip="{Binding RegexModeTip}"/>
-                    <ToggleButton Grid.Column="3"
-                                  Content="Advanced"
-                                  Margin="8,0,0,0"
-                                  IsChecked="{Binding IsAdvancedOpen}"
-                                  Style="{StaticResource ToolbarToggle}"
-                                  ToolTip="Size, date, Current scan / All previous scans / Selected folder, and name vs path. Ext is next to Search. Not saved."/>
                 </Grid>
-                <WrapPanel Margin="0,8,0,-8" Visibility="{Binding IsAdvancedOpen, Converter={StaticResource BoolToVis}}">
+                <WrapPanel Margin="0,8,0,-8">
+                    <Border Style="{StaticResource FilterGroup}">
+                        <StackPanel>
+                            <TextBlock Text="{Binding MatchModeGroupLabel}" Style="{StaticResource FilterCaption}"/>
+                            <ComboBox MinWidth="148"
+                                      ItemsSource="{Binding MatchModeOptions}"
+                                      SelectedItem="{Binding MatchMode}"
+                                      ToolTip="{Binding SearchMatchTip}"/>
+                        </StackPanel>
+                    </Border>
                     <Border Style="{StaticResource FilterGroup}">
                         <StackPanel>
                             <TextBlock Text="SIZE" Style="{StaticResource FilterCaption}"/>
@@ -238,15 +250,6 @@
                                       ItemsSource="{Binding ScopeOptions}"
                                       SelectedItem="{Binding SearchScope}"
                                       ToolTip="{Binding SearchScopeTip}"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource FilterGroup}" Margin="0,0,0,8">
-                        <StackPanel>
-                            <TextBlock Text="MATCH" Style="{StaticResource FilterCaption}"/>
-                            <ComboBox MinWidth="148"
-                                      ItemsSource="{Binding MatchModeOptions}"
-                                      SelectedItem="{Binding MatchMode}"
-                                      ToolTip="{Binding SearchMatchTip}"/>
                         </StackPanel>
                     </Border>
                 </WrapPanel>

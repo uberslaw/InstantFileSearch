@@ -36,7 +36,7 @@ public static class FileNameSearch
             yield break;
         }
 
-        var expression = SearchExpression.Parse(query.Text, query.UseRegex);
+        var expression = SearchExpression.Parse(query.Text, query.UseRegex, query.TermOperator);
         if (expression.IsRegexInvalid)
         {
             yield break;
@@ -169,7 +169,15 @@ public static class FileNameSearch
 
         foreach (var term in expression.Terms)
         {
-            if (!Matches(name, fullPath, term.Pattern, term.Wildcard, query.Match))
+            var matched = Matches(name, fullPath, term.Pattern, term.Wildcard, query.Match);
+            if (term.Negate)
+            {
+                if (matched)
+                {
+                    return false;
+                }
+            }
+            else if (!matched)
             {
                 return false;
             }

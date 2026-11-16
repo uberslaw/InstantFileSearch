@@ -323,9 +323,10 @@ public static class CliHost
         output.WriteLine("Instant File Search CLI");
         output.WriteLine("  scan <folder>              Scan a local folder or UNC share (\\\\server\\share)");
         output.WriteLine("  search [--ext pdf,docx] [--regex] <query>");
-        output.WriteLine("                             Exact name, * ?, + AND, path:. --ext filters last '.' segment");
-        output.WriteLine("                             (comma/semicolon/space; leading dots optional). --regex: whole");
-        output.WriteLine("                             query is one .NET regex (path: still a prefix filter; + is not AND).");
+        output.WriteLine("                             Contains (default), * ?, + AND, path:. --ext filters last '.'");
+        output.WriteLine("                             segment (comma/semicolon/space; leading dots optional). --regex:");
+        output.WriteLine("                             whole query is one .NET regex (path: still a prefix filter; + is");
+        output.WriteLine("                             not AND). Match field default is Name.");
         output.WriteLine("                             Searches all saved snapshots; Last present is when the path was last seen.");
         output.WriteLine("  status                     Snapshots, last present times, exclusions");
         output.WriteLine("  exclude add|list|remove    Skip folders on future scans");

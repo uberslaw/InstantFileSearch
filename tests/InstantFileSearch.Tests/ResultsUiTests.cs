@@ -172,20 +172,27 @@ public class ResultsUiTests
         Assert.Equal("\uE7C3", ResultsUi.FileGlyph(isFolder: false));
         Assert.Contains("left tree", ResultsUi.FolderResultClickHint, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("clears the search box", ResultsUi.FolderResultClickHint, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("exact whole name", ResultsUi.SearchBoxTip, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("contains", ResultsUi.SearchBoxTip, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("anythingwithcmdinit", ResultsUi.SearchBoxTip, StringComparison.Ordinal);
+        Assert.Contains("is exactly", ResultsUi.SearchBoxTip, StringComparison.Ordinal);
         Assert.Contains("cisco + zero", ResultsUi.SearchBoxTip, StringComparison.Ordinal);
         Assert.Contains("path:Incoming", ResultsUi.SearchBoxTip, StringComparison.Ordinal);
         Assert.Contains("No OR", ResultsUi.SearchBoxTip, StringComparison.Ordinal);
         Assert.Contains("Regex toggle", ResultsUi.SearchBoxTip, StringComparison.Ordinal);
         Assert.Contains("not AND", ResultsUi.SearchBoxTip, StringComparison.Ordinal);
         Assert.Contains("not to path:", ResultsUi.SearchMatchTip, StringComparison.Ordinal);
+        Assert.Contains("Default is Name", ResultsUi.SearchMatchTip, StringComparison.Ordinal);
+        Assert.Contains("contains", ResultsUi.SearchBoxPlaceholder, StringComparison.Ordinal);
         Assert.Contains("+ AND", ResultsUi.SearchBoxPlaceholder, StringComparison.Ordinal);
+        Assert.Contains("Disabled while Regex is on", ResultsUi.TermOperatorTip, StringComparison.Ordinal);
+        Assert.Contains("explicit glob", ResultsUi.TermOperatorTip, StringComparison.Ordinal);
         Assert.Contains("pdf, docx", ResultsUi.ExtensionBoxPlaceholder, StringComparison.Ordinal);
         Assert.Contains("last '.' segment", ResultsUi.ExtensionBoxTip, StringComparison.Ordinal);
         Assert.Contains("Invalid tokens", ResultsUi.ExtensionBoxTip, StringComparison.Ordinal);
         Assert.Contains("Current scan", ResultsUi.SearchScopeTip, StringComparison.Ordinal);
         Assert.Contains("scan root", ResultsUi.SearchScopeTip, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(".NET regex", ResultsUi.RegexModeTip, StringComparison.Ordinal);
+        Assert.Contains("operator combo is disabled", ResultsUi.RegexModeTip, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

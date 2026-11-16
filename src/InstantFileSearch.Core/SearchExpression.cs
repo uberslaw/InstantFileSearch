@@ -3,7 +3,8 @@ using System.Text.RegularExpressions;
 namespace InstantFileSearch;
 
 /// <summary>
-/// Parsed search box (and CLI <c>search</c>) text. Default language is exact /
+/// Parsed search box (and CLI <c>search</c>) text. Default language is the
+/// selected name operator (contains unless the UI/CLI says otherwise) /
 /// wildcard / <c>+</c> AND / <c>path:</c> — not regex. Regex mode (opt-in) treats
 /// the whole remaining box as one .NET pattern; <c>path:</c> is still extracted.
 /// </summary>
@@ -18,9 +19,9 @@ public sealed class SearchExpression
     public IReadOnlyList<SearchTerm> PathFilters { get; }
 
     /// <summary>
-    /// True when the query used <c>+</c> as AND. Bare terms then become contains
-    /// (<c>*term*</c>). A single term with no <c>+</c> stays exact-name.
-    /// Disabled in regex mode: <c>+</c> is a regex quantifier, not AND.
+    /// True when the query used <c>+</c> as AND. Each name/path term still uses
+    /// the selected operator (contains by default). Disabled in regex mode:
+    /// <c>+</c> is a regex quantifier, not AND.
     /// </summary>
     public bool UsesAnd { get; }
 
@@ -51,9 +52,13 @@ public sealed class SearchExpression
         CompiledRegex = compiledRegex;
     }
 
-    public static SearchExpression Parse(string? text) => Parse(text, regex: false);
+    public static SearchExpression Parse(string? text) =>
+        Parse(text, regex: false, SearchTermOperator.Contains);
 
-    public static SearchExpression Parse(string? text, bool regex)
+    public static SearchExpression Parse(string? text, bool regex) =>
+        Parse(text, regex, SearchTermOperator.Contains);
+
+    public static SearchExpression Parse(string? text, bool regex, SearchTermOperator termOperator)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
@@ -65,10 +70,10 @@ public sealed class SearchExpression
             return ParseRegex(text);
         }
 
-        return ParseDefault(text);
+        return ParseDefault(text, termOperator);
     }
 
-    private static SearchExpression ParseDefault(string text)
+    private static SearchExpression ParseDefault(string text, SearchTermOperator termOperator)
     {
         var terms = new List<string>();
         var paths = new List<string>();
@@ -118,7 +123,7 @@ public sealed class SearchExpression
         var compiledTerms = new SearchTerm[terms.Count];
         for (var t = 0; t < terms.Count; t++)
         {
-            compiledTerms[t] = CompileTerm(terms[t], containsByDefault: usesAnd);
+            compiledTerms[t] = CompileTerm(terms[t], termOperator);
         }
 
         var compiledPaths = new SearchTerm[paths.Count];
@@ -220,15 +225,22 @@ public sealed class SearchExpression
     public static string NormalizeSlashes(string value) =>
         value.Replace('/', '\\');
 
-    private static SearchTerm CompileTerm(string raw, bool containsByDefault)
+    private static SearchTerm CompileTerm(string raw, SearchTermOperator termOperator)
     {
-        var wildcard = FileNameSearch.HasWildcard(raw);
-        if (!wildcard && containsByDefault)
+        // Explicit globs win: do not also wrap with contains/prefix/suffix.
+        if (FileNameSearch.HasWildcard(raw))
         {
-            return new SearchTerm("*" + raw + "*", Wildcard: true);
+            return new SearchTerm(raw, Wildcard: true);
         }
 
-        return new SearchTerm(raw, wildcard);
+        return termOperator switch
+        {
+            SearchTermOperator.IsExactly => new SearchTerm(raw, Wildcard: false),
+            SearchTermOperator.IsNotExactly => new SearchTerm(raw, Wildcard: false, Negate: true),
+            SearchTermOperator.BeginsWith => new SearchTerm(raw + "*", Wildcard: true),
+            SearchTermOperator.EndsWith => new SearchTerm("*" + raw, Wildcard: true),
+            _ => new SearchTerm("*" + raw + "*", Wildcard: true),
+        };
     }
 
     private static SearchTerm CompilePathFilter(string raw)
@@ -297,4 +309,4 @@ public sealed class SearchExpression
     }
 }
 
-public readonly record struct SearchTerm(string Pattern, bool Wildcard);
+public readonly record struct SearchTerm(string Pattern, bool Wildcard, bool Negate = false);

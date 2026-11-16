@@ -20,7 +20,7 @@ public class ByteFormatterTests
 public class FileNameSearchTests
 {
     [Fact]
-    public void MatchesExactNameAndRequiresWildcardForPartial()
+    public void DefaultContainsMatchesPartialAndWildcardStillWorks()
     {
         var files = new[]
         {
@@ -28,10 +28,15 @@ public class FileNameSearchTests
             new FileEntry { Name = "notes.txt", FullPath = @"C:\Work\notes.txt", Size = 4, Modified = DateTime.UnixEpoch },
         };
 
-        Assert.Empty(FileNameSearch.Filter(files, "report"));
+        Assert.Equal("Report.xlsx", Assert.Single(FileNameSearch.Filter(files, "report")).Name);
         Assert.Single(FileNameSearch.Filter(files, "Report.xlsx"));
         Assert.Single(FileNameSearch.Filter(files, "*.txt"));
         Assert.Empty(FileNameSearch.Filter(files, "missing"));
+        Assert.Empty(FileNameSearch.Filter(files, new SearchQuery
+        {
+            Text = "report",
+            TermOperator = SearchTermOperator.IsExactly,
+        }));
     }
 
     [Fact]
@@ -83,7 +88,12 @@ public class FileScannerTests
             Assert.True(DateTime.UtcNow - result.CompletedUtc < TimeSpan.FromMinutes(1));
             Assert.Single(FileNameSearch.Filter(result.AllFiles, "*.txt"));
             Assert.Single(FileNameSearch.Filter(result.AllFiles, "video.bin"));
-            Assert.Empty(FileNameSearch.Filter(result.AllFiles, "video"));
+            Assert.Equal("video.bin", Assert.Single(FileNameSearch.Filter(result.AllFiles, "video")).Name);
+            Assert.Empty(FileNameSearch.Filter(result.AllFiles, new SearchQuery
+            {
+                Text = "video",
+                TermOperator = SearchTermOperator.IsExactly,
+            }));
         }
         finally
         {
